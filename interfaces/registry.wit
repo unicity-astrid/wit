@@ -8,32 +8,19 @@ package astrid:registry@1.0.0;
 interface registry {
     /// An available LLM provider entry.
     record provider-entry {
+        /// Model ID (e.g. "gpt-5.4", "claude-sonnet-4-20250514").
         id: string,
+        /// Human-readable description.
         description: string,
-        capsule: string,
+        /// IPC topic to publish LLM requests to.
+        request-topic: string,
+        /// IPC topic the provider streams responses on.
+        stream-topic: string,
+        /// Model capabilities (e.g. "text", "vision", "tools").
         capabilities: list<string>,
-    }
-
-    /// Request to list available providers.
-    record get-providers-request {
-        correlation-id: option<string>,
-    }
-
-    /// Response with available providers.
-    record get-providers-response {
-        providers: list<provider-entry>,
-        active-model: option<string>,
-    }
-
-    /// Request to change the active model.
-    record set-active-model-request {
-        model-id: string,
-    }
-
-    /// Event emitted when the active model changes.
-    record active-model-changed-event {
-        previous: option<string>,
-        current: string,
-        capsule: string,
+        /// Provider's context window size in tokens.
+        context-window: option<u64>,
+        /// Provider's max output tokens per request.
+        max-output-tokens: option<u64>,
     }
 }

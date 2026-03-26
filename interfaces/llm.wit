@@ -13,7 +13,8 @@ interface llm {
         model: string,
         messages: list<message>,
         tools: list<tool-definition>,
-        system-prompt: string,
+        /// System prompt.
+        system: string,
     }
 
     /// A streaming event from the provider.

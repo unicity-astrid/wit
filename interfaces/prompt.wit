@@ -6,7 +6,7 @@ package astrid:prompt@1.0.0;
 /// and publishes assembled prompts, with before/after hooks for context
 /// injection by plugin capsules.
 interface prompt {
-    use astrid:types/types.{message};
+    use astrid:types/types.{message, tool-definition};
 
     /// Request to assemble a prompt for LLM generation.
     record assemble-request {
@@ -24,6 +24,10 @@ interface prompt {
         user-context-prefix: string,
         request-id: string,
         session-id: option<string>,
+        /// Collected tool schemas from tool-providing capsules.
+        tools: list<tool-definition>,
+        /// Session conversation history messages.
+        messages: list<message>,
     }
 
     /// Hook payload sent before prompt build (plugins inject context).
