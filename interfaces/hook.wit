@@ -26,9 +26,11 @@ interface hook {
         kernel-shutdown,
     }
 
-    /// Result of a hook execution (from plugin capsules).
+    /// Merged result from hook fan-out.
     record hook-result {
-        hook-name: string,
-        payload: string,
+        /// Whether the operation should be skipped.
+        skip: option<bool>,
+        /// Merged data from interceptor responses (opaque JSON).
+        data: option<string>,
     }
 }

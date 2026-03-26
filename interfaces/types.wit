@@ -38,8 +38,11 @@ interface types {
 
     /// A tool call requested by the model.
     record tool-call {
-        call-id: string,
-        tool-name: string,
+        /// Tool call identifier.
+        id: string,
+        /// Name of the tool to invoke.
+        name: string,
+        /// JSON-encoded arguments (serde_json::Value in Rust).
         arguments: string,
     }
 
