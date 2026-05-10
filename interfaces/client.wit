@@ -1,0 +1,20 @@
+package astrid:client@1.0.0;
+
+/// Client interface — connection lifecycle envelopes for uplinks.
+///
+/// Uplinks publish `client.v1.connect` on attach and `client.v1.disconnect`
+/// on detach so the kernel can update the active-connection count and
+/// trigger idle-shutdown when the last client disconnects.
+interface client {
+    /// A client has connected to an uplink.
+    record connect {
+        /// Optional client identifier (e.g. process name + PID).
+        client-id: option<string>,
+    }
+
+    /// A client is disconnecting gracefully.
+    record disconnect {
+        /// Optional reason for disconnection (e.g. "quit", "timeout").
+        reason: option<string>,
+    }
+}

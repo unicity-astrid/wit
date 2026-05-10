@@ -1,0 +1,53 @@
+package astrid:system@1.0.0;
+
+/// System interface — kernel-emitted lifecycle, health, and CLI envelopes.
+///
+/// The kernel publishes these on the IPC bus so capsules can react to
+/// boot-completion, shutdown, watchdog ticks, bus health warnings, and
+/// inbound CLI slash-commands.
+interface system {
+    /// Published once after every capsule has reported ready, signalling
+    /// that the agent stack is fully online. Topic: `astrid.v1.capsules_loaded`.
+    record capsules-loaded {
+        /// IDs of every capsule that successfully loaded.
+        capsule-ids: list<string>,
+    }
+
+    /// Periodic kernel watchdog tick, used by long-lived capsules to age
+    /// out stale state (timeouts, abandoned correlations, etc.).
+    /// Topic: `astrid.v1.watchdog.tick`.
+    record watchdog-tick {
+        /// Wall-clock time of the tick (UNIX epoch milliseconds).
+        timestamp-ms: u64,
+    }
+
+    /// Warning emitted when a subscriber falls behind and the bus had to
+    /// drop messages. Subscribers can use this as a signal to drain or
+    /// resubscribe. Topic: `astrid.v1.event_bus.lagged`.
+    record event-bus-lagged {
+        /// Topic that lagged.
+        topic: string,
+        /// Number of messages dropped.
+        dropped: u64,
+    }
+
+    /// Cooperative restart signal — the kernel asks long-lived capsules
+    /// to flush ephemeral state and re-arm. Topic: `system.v1.lifecycle.restart`.
+    record lifecycle-restart {
+        /// Reason for the restart (e.g. `"config-reload"`, `"upgrade"`).
+        reason: string,
+    }
+
+    /// A slash-command typed by a human in an uplink. The CLI capsule
+    /// publishes this when the user enters `/<command> [args]`. Routed
+    /// to the capsule that registered the command name via its manifest.
+    /// Topic: `cli.v1.command.execute`.
+    record command-execute {
+        /// The command name (without the leading slash).
+        name: string,
+        /// JSON-encoded arguments (parsed by the receiving capsule).
+        arguments: string,
+        /// Session ID the command was issued in.
+        session-id: string,
+    }
+}

@@ -6,10 +6,29 @@ package astrid:tool@1.0.0;
 /// routes to the appropriate tool capsule via `tool.v1.execute.<name>`,
 /// and collects results on `tool.v1.execute.*.result`.
 interface tool {
-    use astrid:types/types.{tool-call, tool-call-result};
+    use astrid:types/types.{tool-call, tool-call-result, tool-definition};
 
     /// Request to cancel in-flight tool executions.
     record cancel-request {
         call-ids: list<string>,
+    }
+
+    /// Request asking a tool-providing capsule to enumerate its tools.
+    /// Topic: `tool.v1.request.describe`. Empty payload — every responder
+    /// returns its full tool list. Routed by the SDK macro from
+    /// `#[astrid::tool(...)]` attributes.
+    record describe-request {
+        /// Correlation ID for the response. The capsule replies on
+        /// `tool.v1.response.describe.<correlation-id>`.
+        correlation-id: string,
+    }
+
+    /// Response listing the tools a capsule provides.
+    /// Topic: `tool.v1.response.describe.<correlation-id>`.
+    record describe-response {
+        /// Must match the `correlation-id` from the originating request.
+        correlation-id: string,
+        /// The capsule's exposed tools.
+        tools: list<tool-definition>,
     }
 }

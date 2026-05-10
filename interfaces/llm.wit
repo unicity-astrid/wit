@@ -6,6 +6,28 @@ package astrid:llm@1.0.0;
 /// events and publishes `llm.v1.stream.*` streaming responses.
 interface llm {
     use astrid:types/types.{message, tool-definition, usage};
+    use astrid:registry/registry.{provider-entry};
+
+    /// Request asking an LLM-provider capsule to describe itself.
+    /// Topic: `llm.v1.request.describe`. The registry capsule fans this
+    /// out to discover available providers and their per-provider
+    /// request / stream topics.
+    record describe-request {
+        /// Correlation ID for the response. The provider replies on
+        /// `llm.v1.response.describe.<correlation-id>`.
+        correlation-id: string,
+    }
+
+    /// Provider self-description response.
+    /// Topic: `llm.v1.response.describe.<correlation-id>`.
+    record describe-response {
+        /// Must match the `correlation-id` from the originating request.
+        correlation-id: string,
+        /// Provider entries the capsule offers (one capsule may expose
+        /// multiple models — e.g. an OpenAI-compatible front-end serving
+        /// several model IDs).
+        providers: list<provider-entry>,
+    }
 
     /// Request to generate a response.
     record generate-request {

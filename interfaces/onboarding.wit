@@ -1,0 +1,45 @@
+package astrid:onboarding@1.0.0;
+
+/// Onboarding interface — env-var collection at install / first-run.
+///
+/// A capsule publishes `astrid.v1.onboarding.required` when it cannot start
+/// without configuration values that the operator has not yet supplied.
+/// The TUI / installer subscribes, prompts the user per field, and writes
+/// the collected values back to the capsule's `[env]` configuration.
+interface onboarding {
+    /// A capsule needs environment variables to be provided by the user.
+    record required {
+        /// The ID of the capsule requiring onboarding.
+        capsule-id: string,
+        /// Rich field descriptors for each missing env var.
+        fields: list<field>,
+    }
+
+    /// A field descriptor for capsule onboarding.
+    record field {
+        /// The environment variable key.
+        key: string,
+        /// The prompt shown to the user.
+        prompt: string,
+        /// Optional description for additional context.
+        description: option<string>,
+        /// The input type for this field.
+        field-type: field-type,
+        /// Optional default value.
+        default: option<string>,
+        /// Placeholder hint text shown when the input is empty (e.g. `"sk-..."`).
+        placeholder: option<string>,
+    }
+
+    /// The type of input expected for an onboarding field.
+    variant field-type {
+        /// Free-form text input.
+        text,
+        /// Masked secret input (stored in the SecretStore).
+        secret,
+        /// Selection from a fixed set of choices.
+        choice(list<string>),
+        /// Multi-value array input (user adds items one at a time).
+        array,
+    }
+}
