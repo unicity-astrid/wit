@@ -1,0 +1,34 @@
+package astrid:approval@1.0.0;
+
+/// Approval interface — human-in-the-loop authorization envelopes.
+///
+/// A capsule publishes `astrid.v1.approval` when it needs user authorization
+/// for a sensitive action that did not match a pre-approved allowance. The
+/// TUI prompts, then publishes the decision on
+/// `astrid.v1.approval.response.<request-id>`. Distinct from the host
+/// `request-approval` syscall (in-capsule API) — these envelopes carry the
+/// same flow over the IPC bus for uplink consumption.
+interface approval {
+    /// An interceptor or capsule request for human authorization.
+    record required {
+        /// Correlation ID matching the response.
+        request-id: string,
+        /// The action being requested (e.g. `"git push"`).
+        action: string,
+        /// The resource target (e.g. full command string).
+        target-resource: string,
+        /// Justification shown to the user.
+        reason: string,
+    }
+
+    /// Response to an approval request.
+    record response {
+        /// Must match the `request-id` from the originating request.
+        request-id: string,
+        /// The user's decision (e.g. `"approve"`, `"deny"`,
+        /// `"approve_session"`, `"approve_always"`, `"allowance"`).
+        decision: string,
+        /// Optional reason for the decision.
+        reason: option<string>,
+    }
+}

@@ -23,4 +23,39 @@ interface registry {
         /// Provider's max output tokens per request.
         max-output-tokens: option<u64>,
     }
+
+    /// A single option in a selection picker.
+    record selection-option {
+        /// Machine-readable identifier sent back on the callback.
+        id: string,
+        /// Human-readable label shown in the picker.
+        label: string,
+        /// Optional description shown alongside the label.
+        description: option<string>,
+    }
+
+    /// Capsule asking the user to choose from a set of options. Used by
+    /// the registry to drive the LLM-provider picker UI in the TUI.
+    /// Topic: `registry.v1.selection.required`.
+    record selection-required {
+        /// Correlation ID for the callback.
+        request-id: string,
+        /// Title or prompt shown above the list.
+        title: string,
+        /// The selectable options.
+        options: list<selection-option>,
+        /// IPC topic to publish the user's choice back on.
+        callback-topic: string,
+    }
+
+    /// User's selection sent back to the requesting capsule.
+    /// Topic: `registry.v1.selection.callback` (or the `callback-topic`
+    /// declared in the matching `selection-required`).
+    record selection-callback {
+        /// Must match the `request-id` from the originating
+        /// `selection-required`.
+        request-id: string,
+        /// `id` of the chosen `selection-option`.
+        selected-id: string,
+    }
 }

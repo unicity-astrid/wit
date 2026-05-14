@@ -39,4 +39,14 @@ interface session {
         session-id: string,
         messages: list<message>,
     }
+
+    /// Broadcast notification that a session was cleared. Distinct from
+    /// `clear-request`/`clear-response` (the request/response pair the
+    /// session capsule handles): this is a fan-out event the agent loop
+    /// publishes after a successful clear so unrelated capsules can drop
+    /// any per-session ephemeral state. Topic: `session.v1.clear`.
+    record session-cleared {
+        /// Session ID that was cleared.
+        session-id: string,
+    }
 }

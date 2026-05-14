@@ -1,0 +1,19 @@
+package astrid:user@1.0.0;
+
+/// User interface — input envelopes from a human via an uplink.
+///
+/// Uplink capsules (CLI, Telegram, Discord, etc.) publish `user.v1.prompt`
+/// when the human types a message. The agent loop subscribes to drive a
+/// new turn.
+interface user {
+    /// A prompt typed by a human via an uplink.
+    record prompt {
+        /// The raw text input.
+        text: string,
+        /// Session ID for conversation continuity. Defaults to `"default"`.
+        session-id: string,
+        /// Optional extra context (JSON-encoded) — e.g. attachments,
+        /// metadata, or per-turn flags the uplink wants to forward.
+        context: option<string>,
+    }
+}

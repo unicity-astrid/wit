@@ -1,0 +1,32 @@
+package astrid:elicit@1.0.0;
+
+/// Elicit interface — interactive user input during a capsule lifecycle hook.
+///
+/// A capsule publishes `astrid.v1.elicit.<key>` when its install / upgrade
+/// hook needs a value from the user. The TUI prompts, then publishes the
+/// answer on `astrid.v1.elicit.response.<key>`. Distinct from the host
+/// `elicit` syscall (which is the in-capsule API) — these envelopes carry
+/// the same flow over the IPC bus for uplink consumption.
+interface elicit {
+    use astrid:onboarding/onboarding.{field};
+
+    /// A lifecycle hook is requesting user input.
+    record request {
+        /// Correlation ID matching the response.
+        request-id: string,
+        /// The capsule requesting input.
+        capsule-id: string,
+        /// Field descriptor reusing the onboarding schema.
+        field: field,
+    }
+
+    /// Response to an elicit request.
+    record response {
+        /// Must match the `request-id` from the originating request.
+        request-id: string,
+        /// The user's input. Absent if the user cancelled.
+        value: option<string>,
+        /// For `array`-type fields, the collected items.
+        values: option<list<string>>,
+    }
+}
