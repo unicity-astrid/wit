@@ -31,6 +31,7 @@ The capsule-to-capsule contracts. Capsules declare which they import/export in `
 | `interfaces/hook.wit` | `astrid:hook@1.0.0` | Lifecycle hook fan-out and response collection |
 | `interfaces/registry.wit` | `astrid:registry@1.0.0` | Model registry operations |
 | `interfaces/types.wit` | `astrid:types@1.0.0` | Shared types used across interfaces |
+| `interfaces/users.wit` | `astrid:users@1.0.0` | Within-principal user identity store — platform-to-AstridUserId mapping |
 
 ## How capsules use these
 
