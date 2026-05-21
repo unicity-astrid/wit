@@ -190,4 +190,56 @@ interface host {
     ///
     /// Mirrors `std::net::TcpStream::ttl`.
     net-ttl: func(stream-handle: u64) -> result<u32, string>;
+
+    // -----------------------------------------------------------------
+    // UDP — datagram sockets
+    // -----------------------------------------------------------------
+    //
+    // Mirrors `std::net::UdpSocket`. Gated by a separate `net_udp`
+    // capability allowlist (distinct from `net_connect` for TCP) so
+    // capsule authors opt into datagram networking explicitly. The
+    // SSRF airlock applies on send-to / recv-from: peer addresses
+    // resolving to private/loopback/link-local/multicast ranges are
+    // rejected. Max 4 concurrent UDP sockets per capsule.
+
+    /// Datagram returned by `udp-recv-from`.
+    record udp-datagram {
+        /// Payload bytes received.
+        data: list<u8>,
+        /// Peer host (numeric `"ip"` form, IPv4 or IPv6).
+        peer-host: string,
+        /// Peer UDP port.
+        peer-port: u16,
+    }
+
+    /// Bind a UDP socket to `host:port`. Pass `"0.0.0.0"` / `"::"` for
+    /// any interface and `0` for an ephemeral port. Returns a socket
+    /// handle.
+    ///
+    /// Security-gated: requires `net_udp` capability with a matching
+    /// `bind:host:port` pattern.
+    udp-bind: func(host: string, port: u16) -> result<u64, string>;
+
+    /// Send `data` to `peer-host:peer-port`. Returns the byte count sent
+    /// (UDP semantics: short writes are unusual but possible).
+    ///
+    /// Security-gated: peer address goes through the SSRF airlock and
+    /// must match a `send:host:port` pattern in `net_udp`.
+    udp-send-to: func(socket: u64, data: list<u8>, peer-host: string, peer-port: u16) -> result<u32, string>;
+
+    /// Receive up to `max-bytes` from the socket. Blocks up to the
+    /// socket's read timeout (defaults to non-blocking ~50 ms poll).
+    /// Returns an empty data list with sentinel peer (`""`/`0`) if no
+    /// datagram was available.
+    udp-recv-from: func(socket: u64, max-bytes: u32) -> result<udp-datagram, string>;
+
+    /// Set the read timeout for `udp-recv-from`. `none` clears it
+    /// (recv returns immediately when no data is queued).
+    udp-set-read-timeout: func(socket: u64, timeout-ms: option<u64>) -> result<_, string>;
+
+    /// Return the local socket address as `"ip:port"`.
+    udp-local-addr: func(socket: u64) -> result<string, string>;
+
+    /// Close a UDP socket handle. Idempotent.
+    udp-close: func(socket: u64) -> result<_, string>;
 }

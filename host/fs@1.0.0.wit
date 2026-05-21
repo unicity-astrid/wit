@@ -59,4 +59,36 @@ interface host {
     ///
     /// Security-gated: requires file-write capability.
     write-file: func(path: string, content: list<u8>) -> result<_, string>;
+
+    /// Append content to a file, creating it if it does not exist.
+    ///
+    /// Logs, journals, and other accumulating writes use this to avoid the
+    /// read-modify-write hazard of `read-file` + `write-file`. Subject to
+    /// the same 10 MB upper bound on the appended chunk as `write-file`;
+    /// callers writing large logs split into multiple appends.
+    /// Security-gated: requires file-write capability.
+    fs-append: func(path: string, content: list<u8>) -> result<_, string>;
+
+    /// Copy a file from `src` to `dst`. Both paths resolve through the
+    /// VFS, so cross-scheme copies are subject to the same capability
+    /// checks as a `read-file` of `src` plus a `write-file` of `dst`.
+    /// Overwrites `dst` if it exists. Directory copies are not supported;
+    /// `src` must name a regular file.
+    /// Security-gated: requires file-read + file-write capabilities.
+    fs-copy: func(src: string, dst: string) -> result<_, string>;
+
+    /// Rename (move) a file or directory from `src` to `dst`. Both paths
+    /// must resolve to the same VFS scheme — cross-scheme renames are
+    /// rejected because they would require a copy + delete and break the
+    /// atomic-rename contract callers expect.
+    /// Security-gated: requires file-write capability on both paths.
+    fs-rename: func(src: string, dst: string) -> result<_, string>;
+
+    /// Remove a directory and all its contents recursively.
+    ///
+    /// Refuses to traverse symlinks (no following) to prevent escapes
+    /// outside the VFS sandbox. Returns the count of removed entries
+    /// (files + subdirectories).
+    /// Security-gated: requires file-write capability.
+    fs-remove-dir-all: func(path: string) -> result<u64, string>;
 }

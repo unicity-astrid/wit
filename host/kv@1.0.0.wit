@@ -31,4 +31,26 @@ interface host {
     ///
     /// Returns the count of deleted keys.
     kv-clear-prefix: func(prefix: string) -> result<u64, string>;
+
+    /// Atomically compare-and-swap a key.
+    ///
+    /// If the key's current value equals `expected`, replace it with
+    /// `new` and return `true`. Otherwise leave the store unchanged and
+    /// return `false`. `expected` of `none` means "swap only if the key
+    /// does not currently exist" (create-if-absent). Use the read-then-
+    /// cas pattern for unconditional updates that need concurrency
+    /// safety:
+    ///
+    /// ```text
+    /// loop {
+    ///     current = kv-get(key)?;
+    ///     next = mutate(current);
+    ///     if kv-cas(key, current, next)? { break; }
+    /// }
+    /// ```
+    ///
+    /// Required for any concurrent coordination on shared state — the
+    /// kernel does not guarantee single-threaded execution across
+    /// invocations of the same capsule.
+    kv-cas: func(key: string, expected: option<list<u8>>, new: list<u8>) -> result<bool, string>;
 }

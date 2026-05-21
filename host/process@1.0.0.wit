@@ -11,12 +11,34 @@
 package astrid:process@1.0.0;
 
 interface host {
+    /// Environment variable to pass to a spawned process.
+    record env-var {
+        /// Variable name.
+        key: string,
+        /// Variable value.
+        value: string,
+    }
+
     /// Request to spawn a host process.
     record spawn-request {
         /// Command to execute.
         cmd: string,
         /// Command arguments.
         args: list<string>,
+        /// Optional stdin bytes piped to the spawned process. The full
+        /// buffer is delivered to the child's stdin and then stdin is
+        /// closed; the child sees EOF after consuming.
+        stdin: option<list<u8>>,
+        /// Environment variables to set in the child. Replaces (not
+        /// merges with) the host's default sandbox environment, except
+        /// for a small allowlist the kernel always passes through
+        /// (e.g. `PATH` segments needed by sandbox-exec / bwrap).
+        env: list<env-var>,
+        /// Working directory for the child, relative to the workspace.
+        /// Must resolve inside the workspace sandbox; absolute paths
+        /// and `..` escapes are rejected. `none` keeps the workspace
+        /// root.
+        cwd: option<string>,
     }
 
     /// Result of a synchronous process execution.
@@ -81,4 +103,16 @@ interface host {
     ///
     /// Sends SIGKILL to the process group (Unix) or kill (Windows).
     kill: func(process-id: u64) -> result<kill-process-result, string>;
+
+    /// Signal a background process by symbolic name.
+    ///
+    /// Accepted names (Unix semantics): `"term"` (SIGTERM, default
+    /// graceful shutdown), `"hup"` (SIGHUP, reload), `"usr1"` (SIGUSR1),
+    /// `"usr2"` (SIGUSR2), `"int"` (SIGINT). On Windows the kernel maps
+    /// to the closest equivalent; unsupported signals return an error.
+    ///
+    /// `kill` (SIGKILL) remains a separate function because it is
+    /// non-graceful and returns drained stdout/stderr buffers; `signal`
+    /// is fire-and-forget.
+    signal: func(process-id: u64, signal-name: string) -> result<_, string>;
 }
