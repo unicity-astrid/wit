@@ -5,6 +5,20 @@
 /// directory. All processes are tracked for cancellation.
 /// Security-gated: requires `host_process` capability.
 ///
+/// **Desktop-kernel only.** This package depends on a POSIX-style
+/// fork/exec model. Unikernel targets (hermit-rs, etc.) do not implement
+/// it — capsules importing `astrid:process` will fail to load on those
+/// kernels. Capsule-to-capsule patterns over the IPC bus replace most
+/// child-process workflows on the unikernel target; remaining
+/// workloads stay desktop-only by design.
+///
+/// Child stdio is byte-oriented (`write-stdin` / `read-logs`) rather
+/// than stream-based. The bus already handles high-throughput
+/// capsule-to-capsule traffic; stream halves on `process-handle` would
+/// pull weight only for niche "splice TCP into child into TCP" media-
+/// gateway scenarios that haven't materialised yet. Add as
+/// `process-handle@1.1.0` if/when concrete need arises.
+///
 /// Frozen per the ABI evolution discipline (RFC: host_abi). Shape changes
 /// ship as a new file at a new version path; never edit this file.
 
@@ -12,7 +26,6 @@ package astrid:process@1.0.0;
 
 interface host {
     use astrid:io/poll@1.0.0.{pollable};
-    use astrid:io/streams@1.0.0.{input-stream, output-stream};
 
     /// Typed error returned from process operations.
     variant error-code {
@@ -182,30 +195,6 @@ interface host {
         /// Pollable that fires when stdout / stderr has buffered
         /// data ready to be drained via `read-logs`.
         subscribe-logs: func() -> pollable;
-
-        // ---- Stream halves (high-throughput stdio) ----
-        //
-        // The byte-oriented `read-logs` / `write-stdin` methods above
-        // are the simple-case API: small REPL-style I/O, drained on
-        // demand. The stream halves below are the throughput API: pipe
-        // child stdio to/from a network connection, a file, or another
-        // process via `output-stream.splice` without crossing the WASM
-        // boundary per byte. Pick one access pattern per stream — the
-        // kernel serializes them but interleaving is rarely what you
-        // want.
-
-        /// Child's stdin as an `output-stream`. Bytes written here go
-        /// to the child process. `close-stdin` (or dropping this
-        /// stream) signals EOF.
-        stdin: func() -> result<output-stream, error-code>;
-
-        /// Child's stdout as an `input-stream`. Reads bytes the child
-        /// has written. Surfaces `closed` on child exit + buffer drain.
-        stdout: func() -> result<input-stream, error-code>;
-
-        /// Child's stderr as an `input-stream`. Same semantics as
-        /// `stdout`.
-        stderr: func() -> result<input-stream, error-code>;
     }
 
     /// Spawn a synchronous (blocking) process. Blocks the WASM
