@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 #
 # validate-wit.sh — parse every host/*.wit and interfaces/*.wit by
-# staging each file alongside the repo's vendored deps/ tree so cross-
-# package `use` clauses (e.g. `use wasi:io/poll@0.2.0.{pollable};`)
+# staging each file alongside the repo's other WIT files so cross-
+# package `use` clauses (e.g. `use astrid:io/poll@1.0.0.{pollable};`)
 # resolve.
 #
 # wasm-tools resolves WIT dependencies from a sibling `deps/` directory.
 # Each WIT file declares its own package, so we stage one tempdir per
-# file: `<tmp>/main.wit` + `<tmp>/deps/...`. The shared deps live in
-# `<repo-root>/deps/` and are vendored at fixed versions.
+# file: `<tmp>/main.wit` + `<tmp>/deps/...`. The `deps/` directory in
+# this repo is reserved for any future vendored external WIT packages;
+# it is intentionally empty today — the Astrid host ABI does not
+# depend on `wasi:*`, so there is nothing to vendor.
 #
 # Usage: scripts/validate-wit.sh
 
@@ -22,9 +24,9 @@ shopt -s nullglob
 
 # For each main file we want to parse, stage:
 #   main.wit                     <- the file under test
-#   deps/wasi-io/*.wit           <- vendored WASI
 #   deps/astrid-<pkg>/*.wit      <- every OTHER astrid WIT file in the repo,
 #                                   so cross-package `use` clauses resolve.
+#   deps/<external>/*.wit        <- (future) any vendored external packages.
 #
 # Each WIT file declares its own package, so deps/ ends up with one
 # subdirectory per other package in the workspace.

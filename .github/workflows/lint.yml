@@ -37,8 +37,10 @@ jobs:
         run: cargo install --locked wasm-tools
 
       - name: Parse every host/*.wit file
-        # Stages each host/*.wit alongside vendored deps/ (wasi-io) +
-        # sibling host/ files so cross-package `use` clauses resolve.
+        # Stages each host/*.wit alongside its sibling host/ files so
+        # cross-package `use` clauses resolve. There are no vendored
+        # external WIT packages — the Astrid host ABI is self-contained
+        # (`astrid:*` only, no `wasi:*` dependency).
         # interfaces/*.wit files are not validated here — they cross-
         # reference each other and wasm-tools 1.x can't topo-sort deps/
         # in a single pass; downstream SDK builds (cargo-component / wkg)
