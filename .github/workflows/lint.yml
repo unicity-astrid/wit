@@ -37,20 +37,10 @@ jobs:
         run: cargo install --locked wasm-tools
 
       - name: Parse every host/*.wit file
-        # Only host/ — each host package is self-contained (no cross-package
-        # `use`), so single-file mode works. interfaces/ files cross-reference
-        # each other (e.g. `use astrid:types/types.{...}`) and would require a
-        # deps/ tree to resolve; they predate this CI and are validated by
-        # downstream SDK builds.
-        run: |
-          fail=0
-          for f in host/*.wit; do
-            if wasm-tools component wit "$f" >/dev/null 2>&1; then
-              echo "OK:   $f"
-            else
-              echo "FAIL: $f"
-              wasm-tools component wit "$f" 2>&1 | head -20
-              fail=1
-            fi
-          done
-          exit $fail
+        # Stages each host/*.wit alongside vendored deps/ (wasi-io) +
+        # sibling host/ files so cross-package `use` clauses resolve.
+        # interfaces/*.wit files are not validated here — they cross-
+        # reference each other and wasm-tools 1.x can't topo-sort deps/
+        # in a single pass; downstream SDK builds (cargo-component / wkg)
+        # validate them with proper resolution.
+        run: scripts/validate-wit.sh
