@@ -1,12 +1,14 @@
-/// Networking — Unix domain sockets and outbound TCP.
+/// Networking — Unix domain sockets, outbound TCP, UDP, and DNS resolution.
 ///
 /// The kernel pre-binds a single `UnixListener` per capsule. Capsules
 /// accept client connections via the provided listener, then read/write
 /// length-prefixed frames. Session token handshake authentication is
-/// enforced on each accepted connection. Outbound TCP connect is gated
-/// by `net_connect` allowlists and DNS airlock checks.
+/// enforced on each accepted connection. Outbound TCP and UDP are gated
+/// by `net_connect` / `net_udp` allowlists and the SSRF airlock blocks
+/// private/loopback/link-local/multicast/unspecified IPs on resolved
+/// peer addresses.
 ///
-/// Max 8 concurrent streams per capsule.
+/// Max 8 concurrent TCP streams + 4 UDP sockets per capsule.
 ///
 /// Frozen per the ABI evolution discipline (RFC: host_abi). Shape changes
 /// ship as a new file at a new version path; never edit this file.
@@ -14,7 +16,57 @@
 package astrid:net@1.0.0;
 
 interface host {
-    /// Status of a network read operation.
+    use wasi:io/poll@0.2.0.{pollable};
+
+    // -----------------------------------------------------------------
+    // Error type
+    // -----------------------------------------------------------------
+
+    /// Typed error returned from every fallible net operation.
+    variant error-code {
+        /// Operation would block (non-blocking reads with no data,
+        /// non-blocking accept with no pending).
+        would-block,
+        /// Stream / socket has been closed by the peer or locally.
+        closed,
+        /// Capsule lacks the required capability.
+        capability-denied,
+        /// Peer address resolved into the SSRF-blocked range
+        /// (private/loopback/link-local/multicast/unspecified).
+        airlock-rejected,
+        /// Connect attempt refused by peer.
+        connection-refused,
+        /// Established connection was reset.
+        connection-reset,
+        /// Connect / read / write exceeded the call's timeout.
+        timeout,
+        /// Local address already in use (rare for outbound; possible
+        /// for UDP binds).
+        address-in-use,
+        /// Local address can't be bound (parsing error, unsupported
+        /// family).
+        address-not-available,
+        /// DNS resolution returned no results, or all results were
+        /// airlock-rejected.
+        name-unresolvable,
+        /// Stream / socket handle has been dropped and is no longer
+        /// valid.
+        invalid-handle,
+        /// Tried to call a TCP-only option on a Unix-domain stream
+        /// (e.g. `set-nodelay`, `keepalive`, `set-hop-limit`).
+        not-tcp,
+        /// Server-side resource quota exhausted (open streams, open
+        /// UDP sockets).
+        quota,
+        /// Unspecific I/O error from the host. Detail is best-effort.
+        unknown(string),
+    }
+
+    // -----------------------------------------------------------------
+    // Value types
+    // -----------------------------------------------------------------
+
+    /// Status of a length-prefixed framed read.
     variant net-read-status {
         /// Data frame received.
         data(list<u8>),
@@ -24,261 +76,190 @@ interface host {
         pending,
     }
 
-    /// Direction argument for `net-shutdown` — mirrors `std::net::Shutdown`.
+    /// Direction argument for `tcp-stream.shutdown`. Mirrors
+    /// `wasi:sockets` `shutdown-type` (and `std::net::Shutdown`).
     enum shutdown-how {
-        /// Half-close the read side. Subsequent reads return EOF; writes
-        /// continue.
-        read,
-        /// Half-close the write side. The peer sees EOF on its read side;
-        /// reads continue.
-        write,
-        /// Close both directions. Equivalent to `net-close-stream` except
-        /// the handle entry is retained so getters (`peer-addr`, etc.)
-        /// still work until the explicit close call.
+        /// Half-close the read side. Subsequent reads return EOF.
+        receive,
+        /// Half-close the write side. Peer sees EOF on its read side.
+        send,
+        /// Close both directions.
         both,
     }
 
-    /// Bind and activate the pre-provisioned Unix socket listener.
-    ///
-    /// Security-gated: requires net-bind capability. The kernel binds a
-    /// single Unix listener per capsule at load time and returns its
-    /// handle on activation.
-    net-bind-unix: func() -> result<u64, string>;
-
-    /// Blocking accept: wait for the next client connection.
-    ///
-    /// Performs peer credential verification (UID match on Unix) and
-    /// session token handshake. Blocks until a connection arrives or
-    /// the capsule is unloaded. Returns a stream handle ID.
-    net-accept: func(listener-handle: u64) -> result<u64, string>;
-
-    /// Polling accept with a caller-controlled timeout.
-    ///
-    /// Blocks up to `timeout-ms` (capped at 60,000 by the host) waiting
-    /// for the next client connection. Returns a stream handle ID if a
-    /// connection arrived in that window, or `none` if it didn't.
-    net-poll-accept: func(listener-handle: u64, timeout-ms: u64) -> result<option<u64>, string>;
-
-    /// Read the next length-prefixed frame from a stream.
-    ///
-    /// Returns Data with payload, Closed if peer disconnected, or
-    /// Pending if no data available. Max frame size: 10 MB.
-    net-read: func(stream-handle: u64) -> result<net-read-status, string>;
-
-    /// Write a length-prefixed frame to a stream.
-    ///
-    /// Non-fatal on failure (dead stream is cleaned up on next read).
-    net-write: func(stream-handle: u64, data: list<u8>) -> result<_, string>;
-
-    /// Close a stream handle, releasing host-side resources.
-    ///
-    /// Idempotent: closing an already-closed handle is a no-op.
-    /// Publishes a `client.v1.disconnect` IPC event.
-    net-close-stream: func(stream-handle: u64) -> result<_, string>;
-
-    /// Open an outbound TCP connection to `host:port`.
-    ///
-    /// Returns a stream handle compatible with the existing
-    /// `net-read` / `net-write` / `net-close-stream` functions
-    /// — the same handle type returned by `net-accept`.
-    ///
-    /// Security gates (all checked before any TCP syscall):
-    /// - The capsule's `net_connect` capability allowlist must
-    ///   contain a pattern matching `host:port`. Patterns are
-    ///   `"host:port"` exact matches or `"host:*"` (any port for
-    ///   the named host). Missing or empty allowlist denies all
-    ///   outbound TCP (fail-closed).
-    /// - DNS resolution runs after the capability check. The
-    ///   resolved IP is rejected if it falls into a private,
-    ///   loopback, link-local, multicast, or unspecified range,
-    ///   matching the airlock that gates `http-request` /
-    ///   `http-stream-start`.
-    /// - The capsule's per-instance active-stream cap (default
-    ///   8, shared with `net-accept`) is enforced.
-    /// - Connect attempts time out (default 10s) rather than
-    ///   holding the WASM guest in a host fn indefinitely.
-    net-connect-tcp: func(host: string, port: u16) -> result<u64, string>;
-
-    /// Read up to `max-bytes` from `stream` without length-prefix framing.
-    ///
-    /// Mirrors `std::net::TcpStream::read` (and `<TcpStream as Read>::read`).
-    /// Returns the bytes that were available — may be shorter than
-    /// `max-bytes`. Empty list means no data is ready under the current
-    /// read timeout (default: non-blocking, ~50 ms internal poll).
-    ///
-    /// Use this for byte-stream protocols (WebSocket, MQTT, postgres,
-    /// HTTP/1.1, TLS, …). The existing `net-read` keeps the length-prefix
-    /// framing required by the uplink-proxy use case.
-    net-read-bytes: func(stream-handle: u64, max-bytes: u32) -> result<list<u8>, string>;
-
-    /// Write `data` to `stream` without length-prefix framing.
-    ///
-    /// Mirrors `<TcpStream as Write>::write`. Returns the number of
-    /// bytes actually written — may be less than `data.len()` when the
-    /// kernel-side socket buffer is full. Callers loop until `data` is
-    /// drained (the SDK `write_all` wrapper handles this).
-    net-write-bytes: func(stream-handle: u64, data: list<u8>) -> result<u32, string>;
-
-    /// Read up to `max-bytes` from `stream` without consuming them.
-    ///
-    /// Mirrors `std::net::TcpStream::peek`. Subsequent `net-read-bytes`
-    /// returns the same bytes again. Useful for protocol detection on
-    /// the first frame of a connection.
-    net-peek: func(stream-handle: u64, max-bytes: u32) -> result<list<u8>, string>;
-
-    /// Shut down the read side, write side, or both halves of `stream`.
-    ///
-    /// Mirrors `std::net::TcpStream::shutdown`. After `shutdown-how::write`
-    /// the peer sees EOF on its read side; further sends on the local
-    /// side return an error. `shutdown-how::both` closes both directions
-    /// but leaves the handle entry intact so accessors (e.g.
-    /// `peer-addr`) still work until `net-close-stream` is called.
-    net-shutdown: func(stream-handle: u64, how: shutdown-how) -> result<_, string>;
-
-    /// Return the remote peer address as `"ip:port"`.
-    ///
-    /// Mirrors `std::net::TcpStream::peer_addr`. Returns an error for
-    /// Unix-domain stream handles.
-    net-peer-addr: func(stream-handle: u64) -> result<string, string>;
-
-    /// Return the local socket address as `"ip:port"`.
-    ///
-    /// Mirrors `std::net::TcpStream::local_addr`. Returns an error for
-    /// Unix-domain stream handles.
-    net-local-addr: func(stream-handle: u64) -> result<string, string>;
-
-    /// Enable or disable the `TCP_NODELAY` option (Nagle's algorithm off
-    /// when `true`).
-    ///
-    /// Mirrors `std::net::TcpStream::set_nodelay`. Returns an error for
-    /// Unix-domain stream handles.
-    net-set-nodelay: func(stream-handle: u64, nodelay: bool) -> result<_, string>;
-
-    /// Return the current `TCP_NODELAY` setting.
-    ///
-    /// Mirrors `std::net::TcpStream::nodelay`.
-    net-nodelay: func(stream-handle: u64) -> result<bool, string>;
-
-    /// Set the read timeout. `none` clears the timeout (reads still
-    /// honour the host's internal cancellation token; this controls
-    /// only the user-visible blocking duration of each `net-read-bytes`
-    /// call).
-    ///
-    /// Mirrors `std::net::TcpStream::set_read_timeout`. Subsequent
-    /// `net-read-bytes` and `net-peek` calls honour the new value.
-    net-set-read-timeout: func(stream-handle: u64, timeout-ms: option<u64>) -> result<_, string>;
-
-    /// Return the current read timeout in milliseconds, or `none` if
-    /// unset.
-    net-read-timeout: func(stream-handle: u64) -> result<option<u64>, string>;
-
-    /// Set the write timeout. `none` clears it.
-    ///
-    /// Mirrors `std::net::TcpStream::set_write_timeout`.
-    net-set-write-timeout: func(stream-handle: u64, timeout-ms: option<u64>) -> result<_, string>;
-
-    /// Return the current write timeout in milliseconds, or `none` if
-    /// unset.
-    net-write-timeout: func(stream-handle: u64) -> result<option<u64>, string>;
-
-    /// Set the IP `TTL` field on outgoing packets.
-    ///
-    /// Mirrors `std::net::TcpStream::set_ttl`. Returns an error for
-    /// Unix-domain stream handles.
-    net-set-ttl: func(stream-handle: u64, ttl: u32) -> result<_, string>;
-
-    /// Return the current IP TTL.
-    ///
-    /// Mirrors `std::net::TcpStream::ttl`.
-    net-ttl: func(stream-handle: u64) -> result<u32, string>;
-
-    /// Enable TCP keepalive on `stream`. `none` disables; `some(secs)`
-    /// turns it on with that interval between probes. Required for
-    /// long-lived TCP connections (message brokers, DBs, IPC bridges)
-    /// to detect silently-dead peers — without it, a half-dead
-    /// connection holds the stream open until the next explicit write.
-    ///
-    /// Mirrors `socket2::SockRef::set_tcp_keepalive`. Returns an error
-    /// for Unix-domain stream handles (keepalive is TCP-only).
-    net-set-keepalive: func(stream-handle: u64, keepalive-secs: option<u64>) -> result<_, string>;
-
-    /// Return the current keepalive setting, or `none` if disabled.
-    net-keepalive: func(stream-handle: u64) -> result<option<u64>, string>;
-
-    /// Set `SO_LINGER` on `stream`. `none` clears it (default graceful
-    /// FIN close); `some(0)` causes an immediate RST with unsent data
-    /// dropped on close; `some(t)` waits up to `t` ms for unsent data
-    /// to drain before closing. Mirrors `std::net::TcpStream::set_linger`.
-    ///
-    /// Useful for capsules tearing down a connection without waiting
-    /// for the kernel-side TCP buffer to drain (testing, fast shutdown,
-    /// resource-constrained reconnect cycles).
-    net-set-linger: func(stream-handle: u64, linger-ms: option<u64>) -> result<_, string>;
-
-    /// Return the current `SO_LINGER` value, or `none` if unset.
-    net-linger: func(stream-handle: u64) -> result<option<u64>, string>;
-
-    // -----------------------------------------------------------------
-    // UDP — datagram sockets
-    // -----------------------------------------------------------------
-    //
-    // Mirrors `std::net::UdpSocket`. Gated by a separate `net_udp`
-    // capability allowlist (distinct from `net_connect` for TCP) so
-    // capsule authors opt into datagram networking explicitly. The
-    // SSRF airlock applies on send-to / recv-from: peer addresses
-    // resolving to private/loopback/link-local/multicast ranges are
-    // rejected. Max 4 concurrent UDP sockets per capsule.
-
-    /// Datagram returned by `udp-recv-from`.
+    /// Datagram returned by `udp-socket.recv-from`.
     record udp-datagram {
         /// Payload bytes received.
         data: list<u8>,
-        /// Peer host (numeric `"ip"` form, IPv4 or IPv6).
+        /// Peer host (numeric IP, IPv4 or IPv6).
         peer-host: string,
         /// Peer UDP port.
         peer-port: u16,
     }
 
-    /// Bind a UDP socket to `host:port`. Pass `"0.0.0.0"` / `"::"` for
-    /// any interface and `0` for an ephemeral port. Returns a socket
-    /// handle.
-    ///
-    /// Security-gated: requires `net_udp` capability with a matching
-    /// `bind:host:port` pattern.
-    udp-bind: func(host: string, port: u16) -> result<u64, string>;
+    // -----------------------------------------------------------------
+    // TCP listener (Unix-domain only in 1.0; TCP listener deferred)
+    // -----------------------------------------------------------------
 
-    /// Send `data` to `peer-host:peer-port`. Returns the byte count sent
-    /// (UDP semantics: short writes are unusual but possible).
-    ///
-    /// Security-gated: peer address goes through the SSRF airlock and
-    /// must match a `send:host:port` pattern in `net_udp`.
-    udp-send-to: func(socket: u64, data: list<u8>, peer-host: string, peer-port: u16) -> result<u32, string>;
+    /// The capsule's pre-bound Unix domain listener. One per capsule;
+    /// the kernel binds it at load time and the capsule activates it
+    /// with `bind-unix`. TCP listeners (`bind-tcp`) are deferred — the
+    /// `inbound webhook receiver` use case can wait for 1.x.
+    resource unix-listener {
+        /// Blocking accept. Performs peer credential verification
+        /// (UID match on Unix) and session token handshake.
+        accept: func() -> result<tcp-stream, error-code>;
 
-    /// Receive up to `max-bytes` from the socket. Blocks up to the
-    /// socket's read timeout (defaults to non-blocking ~50 ms poll).
-    /// Returns `none` if no datagram was available in the window.
-    udp-recv-from: func(socket: u64, max-bytes: u32) -> result<option<udp-datagram>, string>;
+        /// Polling accept with caller-controlled timeout. Returns
+        /// `none` if no connection arrived within `timeout-ms`
+        /// (capped at 60_000 by the host).
+        poll-accept: func(timeout-ms: u64) -> result<option<tcp-stream>, error-code>;
 
-    /// Set the read timeout for `udp-recv-from`. `none` clears it
-    /// (recv returns immediately when no data is queued).
-    udp-set-read-timeout: func(socket: u64, timeout-ms: option<u64>) -> result<_, string>;
+        /// Pollable that fires when a connection is ready to be
+        /// accepted. Compose with other pollables via
+        /// `wasi:io/poll.poll` for multiplexed I/O.
+        subscribe-readiness: func() -> pollable;
+    }
 
-    /// Return the local socket address as `"ip:port"`.
-    udp-local-addr: func(socket: u64) -> result<string, string>;
+    // -----------------------------------------------------------------
+    // TCP stream — Unix-domain and outbound-TCP streams share this type
+    // -----------------------------------------------------------------
 
-    /// Close a UDP socket handle. Idempotent.
-    udp-close: func(socket: u64) -> result<_, string>;
+    /// A bidirectional stream. Used for both accepted Unix-domain
+    /// connections (`unix-listener.accept`) and outbound TCP
+    /// (`connect-tcp`). TCP-only options return `not-tcp` on Unix
+    /// streams.
+    resource tcp-stream {
+        // ---- Length-prefixed framed I/O (uplink-proxy use case) ----
 
-    /// Resolve a hostname to a list of `"ip"` or `"ip:port"` strings
-    /// (the latter when the input was `"host:port"`). Mirrors
-    /// `std::net::ToSocketAddrs::to_socket_addrs`.
-    ///
-    /// The SSRF airlock applies to each resolved IP — private,
-    /// loopback, link-local, multicast, and unspecified ranges are
-    /// stripped from the returned list. An empty list means resolution
-    /// succeeded but every result was airlock-rejected.
-    ///
-    /// Security-gated: requires `net_connect` or `net_udp` capability.
-    /// Hostnames must match an entry in either allowlist.
-    net-lookup-host: func(host: string) -> result<list<string>, string>;
+        /// Read the next length-prefixed frame. Returns Data/Closed/
+        /// Pending. Max frame size: 10 MB.
+        read: func() -> result<net-read-status, error-code>;
+
+        /// Write a length-prefixed frame. Non-fatal on failure (dead
+        /// stream cleaned up on next read).
+        write: func(data: list<u8>) -> result<_, error-code>;
+
+        // ---- Byte-stream I/O (general protocols) ----
+
+        /// Read up to `max-bytes` from the stream without length-
+        /// prefix framing. Mirrors `std::net::TcpStream::read`. Empty
+        /// list = no data ready within the current read timeout.
+        read-bytes: func(max-bytes: u32) -> result<list<u8>, error-code>;
+
+        /// Write bytes without length-prefix framing. Mirrors
+        /// `<TcpStream as Write>::write`. Returns bytes actually
+        /// written (may be < `data.len()` under buffer pressure).
+        write-bytes: func(data: list<u8>) -> result<u32, error-code>;
+
+        /// Peek without consuming. Mirrors `std::net::TcpStream::peek`.
+        peek: func(max-bytes: u32) -> result<list<u8>, error-code>;
+
+        // ---- Lifecycle ----
+
+        /// Shut down read / write / both. Mirrors
+        /// `std::net::TcpStream::shutdown`. After `shutdown(both)`
+        /// accessors (`peer-addr` etc.) still work until the stream
+        /// is dropped.
+        shutdown: func(how: shutdown-how) -> result<_, error-code>;
+
+        // ---- Address accessors ----
+
+        /// Remote peer address as `"ip:port"`. Returns `not-tcp` for
+        /// Unix-domain streams.
+        peer-addr: func() -> result<string, error-code>;
+
+        /// Local socket address as `"ip:port"`. Returns `not-tcp` for
+        /// Unix-domain streams.
+        local-addr: func() -> result<string, error-code>;
+
+        // ---- TCP socket options (return `not-tcp` for Unix) ----
+
+        /// Enable / disable `TCP_NODELAY` (Nagle off when true).
+        set-nodelay: func(nodelay: bool) -> result<_, error-code>;
+        nodelay: func() -> result<bool, error-code>;
+
+        /// Read timeout. `none` = no timeout.
+        set-read-timeout: func(timeout-ms: option<u64>) -> result<_, error-code>;
+        read-timeout: func() -> result<option<u64>, error-code>;
+
+        /// Write timeout. `none` = no timeout.
+        set-write-timeout: func(timeout-ms: option<u64>) -> result<_, error-code>;
+        write-timeout: func() -> result<option<u64>, error-code>;
+
+        /// IPv6 hop limit / IPv4 TTL (`IP_TTL`/`IPV6_UNICAST_HOPS`).
+        /// Mirrors WASI `set-hop-limit`. Returns `not-tcp` for Unix
+        /// streams.
+        set-hop-limit: func(hops: u32) -> result<_, error-code>;
+        hop-limit: func() -> result<u32, error-code>;
+
+        /// TCP keepalive. `none` disables; `some(secs)` enables with
+        /// the given probe interval. Required for long-lived
+        /// connections to detect silently-dead peers.
+        set-keepalive: func(keepalive-secs: option<u64>) -> result<_, error-code>;
+        keepalive: func() -> result<option<u64>, error-code>;
+
+        /// `SO_LINGER`. `none` = default graceful close; `some(0)` =
+        /// immediate RST drop unsent; `some(t)` = drain up to t ms.
+        set-linger: func(linger-ms: option<u64>) -> result<_, error-code>;
+        linger: func() -> result<option<u64>, error-code>;
+
+        // ---- Readiness ----
+
+        /// Pollable that fires when the stream is ready to read.
+        /// Compose with other pollables for multiplexed I/O.
+        subscribe-readable: func() -> pollable;
+    }
+
+    // -----------------------------------------------------------------
+    // UDP socket resource
+    // -----------------------------------------------------------------
+
+    /// A UDP datagram socket. Bind once; send/recv to/from arbitrary
+    /// peers (SSRF airlock applies on each peer). Connected-UDP mode
+    /// (lock to one peer for performance) is deferred to 1.x.
+    resource udp-socket {
+        /// Send to a peer. Returns bytes sent.
+        send-to: func(data: list<u8>, peer-host: string, peer-port: u16) -> result<u32, error-code>;
+
+        /// Receive up to `max-bytes`. `none` if no datagram arrived
+        /// within the read timeout.
+        recv-from: func(max-bytes: u32) -> result<option<udp-datagram>, error-code>;
+
+        /// Set the read timeout for `recv-from`.
+        set-read-timeout: func(timeout-ms: option<u64>) -> result<_, error-code>;
+
+        /// Local bound address as `"ip:port"`.
+        local-addr: func() -> result<string, error-code>;
+
+        /// Pollable that fires when a datagram is ready to receive.
+        subscribe-readable: func() -> pollable;
+    }
+
+    // -----------------------------------------------------------------
+    // Factory functions at interface scope
+    // -----------------------------------------------------------------
+
+    /// Bind and activate the pre-provisioned Unix listener. The kernel
+    /// binds it at load time per capsule.
+    bind-unix: func() -> result<unix-listener, error-code>;
+
+    /// Open an outbound TCP connection to `host:port`. Goes through
+    /// the SSRF airlock (resolves DNS, rejects private/loopback/etc.).
+    /// Requires `net_connect` allowlist match.
+    connect-tcp: func(host: string, port: u16) -> result<tcp-stream, error-code>;
+
+    /// Bind a UDP socket. `"0.0.0.0"` / `"::"` accepts on any
+    /// interface (NB: capsule becomes reachable from any peer on the
+    /// network — restrict via `net_udp` capability if outbound-only).
+    /// Port `0` selects an ephemeral port.
+    udp-bind: func(host: string, port: u16) -> result<udp-socket, error-code>;
+
+    /// Resolve a hostname to a list of `"ip:port"` (or `"ip"` if no
+    /// port in input) strings. SSRF airlock applies — private,
+    /// loopback, link-local, multicast, unspecified ranges are
+    /// stripped silently. Empty list = all results filtered.
+    /// Requires `net_connect` or `net_udp` capability matching the
+    /// hostname.
+    lookup-host: func(host: string) -> result<list<string>, error-code>;
 }
