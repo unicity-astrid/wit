@@ -1,5 +1,11 @@
 /// System-level runtime functions: logging, config, time, caller context,
-/// hook fan-out, capability introspection.
+/// entropy, sleep, capability introspection.
+///
+/// Astrid does not expose `wasi:random`, `wasi:clocks`, or other generic
+/// WASI primitives to capsules. Every host call is gated, principal-scoped,
+/// and audited — having a second un-audited surface (WASI) would defeat
+/// that. Primitives capsules need (random bytes, monotonic clock, sleep)
+/// live here.
 ///
 /// Frozen per the ABI evolution discipline (RFC: host_abi). Shape changes
 /// ship as a new file at a new version path; never edit this file.
@@ -52,14 +58,6 @@ interface host {
     /// timestamp. Returns an empty context if no caller is available.
     get-caller: func() -> result<caller-context, string>;
 
-    /// Trigger a hook/interceptor fan-out to other capsules.
-    ///
-    /// Input is a JSON request: `{"hook": "topic", "payload": {...}}`.
-    /// Finds all capsules with interceptors matching the hook topic,
-    /// invokes each (skipping the caller to prevent recursion), and
-    /// returns a JSON array of their responses.
-    trigger-hook: func(request-json: string) -> result<string, string>;
-
     /// Emit a structured log message attributed to the calling capsule.
     ///
     /// Logs are routed to the current principal's log directory with
@@ -76,6 +74,29 @@ interface host {
 
     /// Get the current wall-clock time as milliseconds since UNIX epoch.
     clock-ms: func() -> u64;
+
+    /// Get the current monotonic clock reading in nanoseconds.
+    ///
+    /// Suitable for measuring elapsed time within a process. Does not jump
+    /// with NTP adjustments. The absolute value is meaningless across
+    /// processes or capsule reloads — only differences are.
+    clock-monotonic-ns: func() -> u64;
+
+    /// Block the calling guest task for the given duration in nanoseconds.
+    ///
+    /// Capped server-side at 60 seconds per call (callers needing longer
+    /// waits loop on shorter sleeps and check for cancellation between
+    /// iterations). Returns when the duration has elapsed or the capsule
+    /// is unloading.
+    sleep-ns: func(duration-ns: u64) -> result<_, string>;
+
+    /// Fill the caller's requested length with cryptographically secure
+    /// random bytes from the host's OS-level CSPRNG.
+    ///
+    /// `length` is capped at 4096 bytes per call (cryptographic use cases
+    /// — key material, nonces, identifiers — fit comfortably; bulk entropy
+    /// callers loop). Larger requests return an error.
+    random-bytes: func(length: u32) -> result<list<u8>, string>;
 
     /// Check whether a capsule has a specific manifest capability.
     ///

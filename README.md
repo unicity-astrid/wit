@@ -22,7 +22,7 @@ Each domain is its own package, frozen at a per-file version. A capsule imports 
 | `host/kv@1.0.0.wit` | `astrid:kv@1.0.0` | Per-capsule, per-principal key-value storage. |
 | `host/net@1.0.0.wit` | `astrid:net@1.0.0` | Unix-domain sockets and gated outbound TCP. |
 | `host/http@1.0.0.wit` | `astrid:http@1.0.0` | HTTP client with SSRF protection and streaming. |
-| `host/sys@1.0.0.wit` | `astrid:sys@1.0.0` | Logging, config, time, caller context, capability introspection. |
+| `host/sys@1.0.0.wit` | `astrid:sys@1.0.0` | Logging, config, time, caller context, entropy, sleep, capability introspection. |
 | `host/process@1.0.0.wit` | `astrid:process@1.0.0` | OS-sandboxed host process spawn / kill / read-logs. |
 | `host/elicit@1.0.0.wit` | `astrid:elicit@1.0.0` | Interactive user input during install/upgrade lifecycle. |
 | `host/approval@1.0.0.wit` | `astrid:approval@1.0.0` | Human-in-the-loop approval gate for sensitive actions. |
@@ -93,20 +93,6 @@ The capsule-to-capsule contracts. Capsules declare which they import/export in `
 | `interfaces/registry.wit` | `astrid:registry@1.0.0` | Model registry operations |
 | `interfaces/types.wit` | `astrid:types@1.0.0` | Shared types used across interfaces |
 | `interfaces/users.wit` | `astrid:users@1.0.0` | Within-principal user identity store — platform-to-AstridUserId mapping |
-
-## WASI is also available
-
-Capsules see WASI alongside the `astrid:*` packages. The kernel adds `wasmtime_wasi::p2` to the linker, so reach for the standard WASI imports before assuming something is missing from `astrid:*`:
-
-| Need | WASI package |
-|------|--------------|
-| Cryptographically secure random bytes | `wasi:random/random` |
-| Monotonic clock (timeouts, latency, scheduling) | `wasi:clocks/monotonic-clock` |
-| Wall clock with structured datetime | `wasi:clocks/wall-clock` |
-| Sleep / await duration | `wasi:clocks/monotonic-clock.subscribe-duration` |
-| Stream I/O abstractions | `wasi:io/streams` |
-
-`astrid:*` exists where Astrid layers capability gating, principal scoping, or audit on top of what would otherwise be a syscall (`astrid:fs` for VFS-scheme resolution, `astrid:net` for `net_connect` allowlists, etc.). Where no such layering is needed, capsules use WASI directly — there is no `astrid:random` or `astrid:clock-monotonic` because there is nothing to add to the WASI version.
 
 ## How capsules use these
 
