@@ -1,0 +1,37 @@
+/// Human-in-the-loop approval for sensitive actions.
+///
+/// Checks the AllowanceStore first (instant path for pre-approved
+/// patterns), then publishes an ApprovalRequired IPC event and blocks
+/// until the frontend user responds or the request times out (60s).
+///
+/// Frozen per the ABI evolution discipline (RFC: host_abi). Shape changes
+/// ship as a new file at a new version path; never edit this file.
+
+package astrid:approval@1.0.0;
+
+interface host {
+    /// Approval request from a capsule to the host.
+    ///
+    /// The capsule declares the action and resource. The kernel classifies
+    /// risk and manages approval policy — the capsule sees only approved/denied.
+    record approval-request {
+        /// The action being requested (e.g. "git push").
+        action: string,
+        /// Full resource description (e.g. "git push origin main").
+        target-resource: string,
+    }
+
+    /// Approval response from the host.
+    record approval-response {
+        /// Whether the action was approved.
+        approved: bool,
+    }
+
+    /// Request human approval for a sensitive action.
+    ///
+    /// Decision values: "approve" (once), "approve_session", "approve_always",
+    /// "deny", "allowance" (auto-granted via existing allowance).
+    /// Action strings are sanitized (control chars stripped, max 256 chars).
+    /// Resource strings are sanitized (max 1024 chars).
+    request-approval: func(request: approval-request) -> result<approval-response, string>;
+}

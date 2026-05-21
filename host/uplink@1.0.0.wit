@@ -1,0 +1,25 @@
+/// Uplink communications — inbound message ingestion from external platforms.
+///
+/// Capsules register uplinks (named endpoints) for platforms they bridge
+/// (e.g. Discord, Slack) and then forward inbound user messages to the
+/// kernel's processing pipeline.
+///
+/// Frozen per the ABI evolution discipline (RFC: host_abi). Shape changes
+/// ship as a new file at a new version path; never edit this file.
+
+package astrid:uplink@1.0.0;
+
+interface host {
+    /// Register an uplink endpoint.
+    ///
+    /// Arguments: name, platform identifier, profile ("chat", "interactive",
+    /// "notify", "bridge"). Returns the assigned uplink UUID string.
+    /// Security-gated: requires uplink-register capability.
+    uplink-register: func(name: string, platform: string, profile: string) -> result<string, string>;
+
+    /// Send an inbound message through a registered uplink.
+    ///
+    /// Returns true if sent, false if the message was intentionally dropped
+    /// (e.g. no active session for the principal).
+    uplink-send: func(uplink-id: string, platform-user-id: string, content: string) -> result<bool, string>;
+}

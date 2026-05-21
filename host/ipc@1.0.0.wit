@@ -1,0 +1,113 @@
+/// Inter-Process Communication (IPC) event bus.
+///
+/// Capsules communicate via a publish/subscribe event bus. Topics are
+/// dot-delimited strings (max 8 segments, max 256 bytes). Publishing
+/// and subscribing are independently ACL-gated via `ipc_publish` and
+/// `ipc_subscribe` patterns in `Capsule.toml [capabilities]`.
+///
+/// Provenance is tracked via `ipc-message.source-id` (the capsule's
+/// session UUID), not topic namespacing.
+///
+/// Frozen per the ABI evolution discipline (RFC: host_abi). Shape changes
+/// ship as a new file at a new version path; never edit this file.
+
+package astrid:ipc@1.0.0;
+
+interface host {
+    /// IPC message envelope returned by `ipc-poll` and `ipc-recv`.
+    record ipc-envelope {
+        /// List of IPC messages received since last poll/recv.
+        messages: list<ipc-message>,
+        /// Number of messages dropped due to buffer overflow.
+        dropped: u64,
+        /// Cumulative lag (messages missed due to slow consumption).
+        lagged: u64,
+    }
+
+    /// A single IPC message.
+    record ipc-message {
+        /// Topic the message was published on.
+        topic: string,
+        /// Message payload as JSON.
+        payload: string,
+        /// UUID of the capsule that sent this message.
+        source-id: string,
+        /// Principal attributed to the publisher of this message.
+        ///
+        /// For messages published via `ipc-publish`, this is the publishing
+        /// capsule's invocation principal (whoever the host attributed the
+        /// call to). For messages published via `ipc-publish-as`, this is
+        /// the principal the uplink claimed on behalf of an external caller.
+        ///
+        /// `none` for system / kernel-originated events that have no
+        /// attributable principal, and for legacy messages that predate
+        /// this field. Subscribers processing multi-message recv batches
+        /// should read this per-message rather than relying on the
+        /// invocation context (which only reflects the first message's
+        /// publisher).
+        principal: option<string>,
+    }
+
+    /// Pre-registered interceptor handle mapping.
+    record interceptor-handle {
+        /// Subscription handle ID.
+        handle-id: u64,
+        /// Interceptor action name.
+        action: string,
+        /// IPC topic pattern this handle is subscribed to.
+        topic: string,
+    }
+
+    /// Publish a message to a topic.
+    ///
+    /// Payload must be valid JSON. Rate-limited per capsule. The principal
+    /// is automatically propagated from the caller context.
+    ipc-publish: func(topic: string, payload: string) -> result<_, string>;
+
+    /// Publish a message on behalf of a specific principal.
+    ///
+    /// Like `ipc-publish` but stamps the outgoing envelope with the
+    /// supplied principal instead of the capsule's own — used by
+    /// uplinks (CLI proxy, Telegram bridge, etc.) to relay messages
+    /// from external clients while preserving the calling identity
+    /// for downstream capability checks. Gated on `uplink = true` in
+    /// the manifest's `[capabilities]` block. The trust model is
+    /// "trust the uplink": the kernel does not verify that the uplink
+    /// actually authenticated the claimed principal. Real cross-
+    /// principal auth lives in issue #658.
+    ipc-publish-as: func(
+        topic: string,
+        payload: string,
+        principal: string,
+    ) -> result<_, string>;
+
+    /// Subscribe to a topic pattern and receive a handle.
+    ///
+    /// Supports exact matches and trailing-suffix wildcards (`foo.bar.*`).
+    /// Mid-segment wildcards (`a.*.b`) are rejected. Returns a handle ID
+    /// for use with `ipc-poll`, `ipc-recv`, and `ipc-unsubscribe`.
+    /// Max 128 subscriptions per capsule.
+    ipc-subscribe: func(topic-pattern: string) -> result<u64, string>;
+
+    /// Unsubscribe from a topic by handle ID.
+    ///
+    /// Runtime-owned interceptor handles cannot be unsubscribed.
+    ipc-unsubscribe: func(handle-id: u64) -> result<_, string>;
+
+    /// Non-blocking poll for messages on a subscription.
+    ///
+    /// Returns the messages received since last poll, plus drop/lag counts.
+    ipc-poll: func(handle-id: u64) -> result<ipc-envelope, string>;
+
+    /// Blocking receive on a subscription with timeout.
+    ///
+    /// Blocks the WASM thread until a message arrives, the timeout expires
+    /// (capped at 60s), or the capsule is unloaded.
+    ipc-recv: func(handle-id: u64, timeout-ms: u64) -> result<ipc-envelope, string>;
+
+    /// Get pre-registered interceptor handle mappings for run-loop capsules.
+    ///
+    /// Returns a list of interceptor handle objects describing which IPC
+    /// subscription handles correspond to interceptor actions.
+    get-interceptor-handles: func() -> result<list<interceptor-handle>, string>;
+}

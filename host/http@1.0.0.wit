@@ -1,0 +1,74 @@
+/// HTTP client operations with SSRF protection.
+///
+/// DNS resolution blocks connections to private, loopback, link-local,
+/// and multicast IP addresses. IPv4-mapped and IPv4-compatible IPv6
+/// addresses are also checked. The security gate enforces per-capsule
+/// allow-lists and rate limits.
+///
+/// Frozen per the ABI evolution discipline (RFC: host_abi). Shape changes
+/// ship as a new file at a new version path; never edit this file.
+
+package astrid:http@1.0.0;
+
+interface host {
+    /// A key-value pair used for typed header lists.
+    record key-value-pair {
+        key: string,
+        value: string,
+    }
+
+    /// HTTP request sent by a capsule to the host.
+    record http-request-data {
+        /// Target URL.
+        url: string,
+        /// HTTP method (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS).
+        method: string,
+        /// Request headers as key-value pairs.
+        headers: list<key-value-pair>,
+        /// Optional request body.
+        body: option<string>,
+    }
+
+    /// HTTP response returned by the host.
+    record http-response-data {
+        /// HTTP status code.
+        status: u16,
+        /// Response headers.
+        headers: list<key-value-pair>,
+        /// Response body as raw bytes (may contain non-UTF-8 binary data).
+        body: list<u8>,
+    }
+
+    /// HTTP streaming response metadata returned on stream start.
+    record http-stream-start-response {
+        /// Opaque handle for subsequent read/close calls.
+        handle: u64,
+        /// HTTP status code.
+        status: u16,
+        /// Response headers.
+        headers: list<key-value-pair>,
+    }
+
+    /// Perform a buffered HTTP request (full response in memory).
+    ///
+    /// 30s timeout, max response body 10 MB.
+    /// Security-gated: requires http capability.
+    http-request: func(request: http-request-data) -> result<http-response-data, string>;
+
+    /// Start a streaming HTTP request (headers returned, body streamed).
+    ///
+    /// Max 4 concurrent HTTP streams per capsule.
+    /// Security-gated: requires http capability.
+    http-stream-start: func(request: http-request-data) -> result<http-stream-start-response, string>;
+
+    /// Read the next chunk from a streaming HTTP response.
+    ///
+    /// Returns the chunk bytes, or an empty list on EOF.
+    /// 120s per-chunk timeout.
+    http-stream-read: func(stream-handle: u64) -> result<list<u8>, string>;
+
+    /// Close a streaming HTTP response handle.
+    ///
+    /// Idempotent: closing an already-closed handle is a no-op.
+    http-stream-close: func(stream-handle: u64) -> result<_, string>;
+}

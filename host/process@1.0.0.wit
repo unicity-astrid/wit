@@ -1,0 +1,84 @@
+/// Host-side process spawning with OS-level sandboxing.
+///
+/// Commands are wrapped in platform-specific sandbox tools
+/// (`sandbox-exec` on macOS, `bwrap` on Linux) scoped to the
+/// workspace directory. All processes are tracked for cancellation.
+/// Security-gated: requires host-process capability.
+///
+/// Frozen per the ABI evolution discipline (RFC: host_abi). Shape changes
+/// ship as a new file at a new version path; never edit this file.
+
+package astrid:process@1.0.0;
+
+interface host {
+    /// Request to spawn a host process.
+    record spawn-request {
+        /// Command to execute.
+        cmd: string,
+        /// Command arguments.
+        args: list<string>,
+    }
+
+    /// Result of a synchronous process execution.
+    record process-result {
+        /// Captured standard output.
+        stdout: string,
+        /// Captured standard error.
+        stderr: string,
+        /// Process exit code (-1 if killed or unknown).
+        exit-code: s32,
+    }
+
+    /// Result of spawning a background process.
+    record spawn-background-result {
+        /// Opaque process handle for subsequent log/kill calls.
+        id: u64,
+    }
+
+    /// Logs and status from a background process.
+    record read-logs-result {
+        /// Buffered stdout since last read.
+        stdout: string,
+        /// Buffered stderr since last read.
+        stderr: string,
+        /// Whether the process is still running.
+        running: bool,
+        /// Exit code if the process has terminated.
+        exit-code: option<s32>,
+    }
+
+    /// Result of killing a background process.
+    record kill-process-result {
+        /// Whether the process was successfully killed.
+        killed: bool,
+        /// Exit code if available.
+        exit-code: option<s32>,
+        /// Final buffered stdout.
+        stdout: string,
+        /// Final buffered stderr.
+        stderr: string,
+    }
+
+    /// Spawn a synchronous (blocking) process.
+    ///
+    /// Blocks the WASM thread until the process exits or is cancelled.
+    /// Cancelled processes return exit_code -1.
+    spawn: func(request: spawn-request) -> result<process-result, string>;
+
+    /// Spawn a background (non-blocking) process.
+    ///
+    /// Returns a process handle for subsequent log/kill calls.
+    /// Max 8 concurrent background processes per capsule.
+    /// stdout/stderr are buffered (1 MB per stream, ring buffer).
+    spawn-background: func(request: spawn-request) -> result<spawn-background-result, string>;
+
+    /// Read buffered logs from a background process.
+    ///
+    /// Drains the buffers (subsequent reads return only new data).
+    read-logs: func(process-id: u64) -> result<read-logs-result, string>;
+
+    /// Kill a background process.
+    ///
+    /// Sends SIGKILL to the process group (Unix) or kill (Windows).
+    kill: func(process-id: u64) -> result<kill-process-result, string>;
+}

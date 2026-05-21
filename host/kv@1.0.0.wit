@@ -1,0 +1,34 @@
+/// Key-Value persistent storage.
+///
+/// Keys are scoped per-principal and per-capsule. Each capsule sees only
+/// its own namespace (`wasm:{capsule_id}`), and per-invocation principal
+/// scoping ensures different users' data is isolated even when the same
+/// capsule serves multiple principals.
+///
+/// Frozen per the ABI evolution discipline (RFC: host_abi). Shape changes
+/// ship as a new file at a new version path; never edit this file.
+
+package astrid:kv@1.0.0;
+
+interface host {
+    /// Read a value by key.
+    ///
+    /// Returns the stored bytes, or none if the key does not exist.
+    kv-get: func(key: string) -> result<option<list<u8>>, string>;
+
+    /// Write a value by key.
+    kv-set: func(key: string, value: list<u8>) -> result<_, string>;
+
+    /// Delete a key.
+    kv-delete: func(key: string) -> result<_, string>;
+
+    /// List all keys matching a prefix.
+    ///
+    /// Returns a list of matching key strings.
+    kv-list-keys: func(prefix: string) -> result<list<string>, string>;
+
+    /// Delete all keys matching a prefix.
+    ///
+    /// Returns the count of deleted keys.
+    kv-clear-prefix: func(prefix: string) -> result<u64, string>;
+}

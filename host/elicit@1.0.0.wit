@@ -1,0 +1,39 @@
+/// Interactive user input collection during lifecycle hooks.
+///
+/// Only callable during `#[install]` or `#[upgrade]` lifecycle phases.
+/// Blocks the WASM thread until the frontend (TUI/CLI) collects user
+/// input and publishes a response, or the request times out (120s).
+///
+/// Frozen per the ABI evolution discipline (RFC: host_abi). Shape changes
+/// ship as a new file at a new version path; never edit this file.
+
+package astrid:elicit@1.0.0;
+
+interface host {
+    /// Request for user input during capsule lifecycle.
+    record elicit-request {
+        /// Input type: "text", "secret", "select", or "array".
+        elicit-type: string,
+        /// Key for storing the collected value.
+        key: string,
+        /// Human-readable prompt description.
+        description: string,
+        /// Options for select-type inputs.
+        options: option<list<string>>,
+        /// Default value.
+        default-value: option<string>,
+    }
+
+    /// Prompt the user for input (text, secret, select, or array).
+    ///
+    /// Returns a JSON response depending on the request type:
+    ///   text/select: `{"value": "..."}`,
+    ///   secret: `{"ok": true}` (value stored in SecretStore),
+    ///   array: `{"values": [...]}`.
+    elicit: func(request: elicit-request) -> result<string, string>;
+
+    /// Check whether a secret key has been stored for this capsule.
+    ///
+    /// Uses the SecretStore abstraction (OS keychain with KV fallback).
+    has-secret: func(key: string) -> result<bool, string>;
+}

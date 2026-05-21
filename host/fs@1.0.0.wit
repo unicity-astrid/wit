@@ -1,0 +1,62 @@
+/// Filesystem operations within the capsule's workspace boundary.
+///
+/// All paths are resolved relative to the workspace root. The `home://`
+/// URI scheme accesses the principal's home directory. Paths under `/tmp/`
+/// access per-principal temporary storage. Attempts to escape any boundary
+/// return an error. Symlink traversal is canonicalized to prevent bypass.
+///
+/// Frozen per the ABI evolution discipline (RFC: host_abi). Shape changes
+/// ship as a new file at a new version path; never edit this file.
+
+package astrid:fs@1.0.0;
+
+interface host {
+    /// File metadata returned by `fs-stat`.
+    record file-stat {
+        /// File size in bytes.
+        size: u64,
+        /// Whether this entry is a directory.
+        is-dir: bool,
+        /// Last modification time (UNIX epoch seconds), if available.
+        mtime: option<u64>,
+    }
+
+    /// Check whether a file or directory exists at the given path.
+    ///
+    /// Returns true if the path exists, false otherwise.
+    /// Security-gated: requires file-read capability.
+    fs-exists: func(path: string) -> result<bool, string>;
+
+    /// Create a directory (and parents) at the given path.
+    ///
+    /// Security-gated: requires file-write capability.
+    fs-mkdir: func(path: string) -> result<_, string>;
+
+    /// List entries in a directory.
+    ///
+    /// Returns a list of entry name strings.
+    /// Security-gated: requires file-read capability.
+    fs-readdir: func(path: string) -> result<list<string>, string>;
+
+    /// Get file metadata (size, type, mtime).
+    ///
+    /// Security-gated: requires file-read capability.
+    fs-stat: func(path: string) -> result<file-stat, string>;
+
+    /// Remove a file at the given path.
+    ///
+    /// Security-gated: requires file-write capability.
+    fs-unlink: func(path: string) -> result<_, string>;
+
+    /// Read a file's contents as bytes.
+    ///
+    /// Files larger than 10 MB are rejected. Paths are resolved through
+    /// the VFS layer with sandbox boundary enforcement.
+    /// Security-gated: requires file-read capability.
+    read-file: func(path: string) -> result<list<u8>, string>;
+
+    /// Write content to a file (truncating if it exists, creating if not).
+    ///
+    /// Security-gated: requires file-write capability.
+    write-file: func(path: string, content: list<u8>) -> result<_, string>;
+}

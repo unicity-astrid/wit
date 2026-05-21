@@ -1,0 +1,99 @@
+/// Multi-platform identity resolution and linking.
+///
+/// Maps external platform identities (Discord user, GitHub user, etc.)
+/// to internal Astrid user IDs. All operations are security-gated per
+/// operation type (resolve, link, unlink, create-user, list-links).
+///
+/// Frozen per the ABI evolution discipline (RFC: host_abi). Shape changes
+/// ship as a new file at a new version path; never edit this file.
+
+package astrid:identity@1.0.0;
+
+interface host {
+    /// Request to resolve a platform identity to an Astrid user.
+    record identity-resolve-request {
+        /// External platform (e.g. "discord", "github").
+        platform: string,
+        /// User ID on the external platform.
+        platform-user-id: string,
+    }
+
+    /// Result of an identity resolve operation.
+    record identity-resolve-response {
+        /// Whether a matching user was found.
+        found: bool,
+        /// The Astrid user ID, if found.
+        user-id: option<string>,
+        /// The user's display name, if available.
+        display-name: option<string>,
+        /// Error message, if the operation failed.
+        error: option<string>,
+    }
+
+    /// Request to link a platform identity to an Astrid user.
+    record identity-link-request {
+        /// External platform (e.g. "discord", "github").
+        platform: string,
+        /// User ID on the external platform.
+        platform-user-id: string,
+        /// Internal Astrid user ID to link to.
+        astrid-user-id: string,
+        /// Authentication method (e.g. "passkey", "token").
+        method: string,
+    }
+
+    /// Request to unlink a platform identity.
+    record identity-unlink-request {
+        /// External platform.
+        platform: string,
+        /// User ID on the external platform.
+        platform-user-id: string,
+    }
+
+    /// Request to create a new Astrid user.
+    record identity-create-user-request {
+        /// Optional display name for the new user.
+        display-name: option<string>,
+    }
+
+    /// Request to list platform links for an Astrid user.
+    record identity-list-links-request {
+        /// Internal Astrid user ID.
+        astrid-user-id: string,
+    }
+
+    /// Result of an identity mutation (link, unlink, create-user, list-links).
+    record identity-ok-response {
+        /// Whether the operation succeeded.
+        ok: bool,
+        /// Error message, if the operation failed.
+        error: option<string>,
+        /// Created user ID (set by create-user on success).
+        user-id: option<string>,
+        /// Whether a link was removed (set by unlink on success).
+        removed: option<bool>,
+        /// JSON-encoded list of platform links (set by list-links on success).
+        links-json: option<string>,
+    }
+
+    /// Resolve a platform identity to an Astrid user.
+    identity-resolve: func(request: identity-resolve-request) -> result<identity-resolve-response, string>;
+
+    /// Link a platform identity to an Astrid user.
+    identity-link: func(request: identity-link-request) -> result<identity-ok-response, string>;
+
+    /// Unlink a platform identity.
+    identity-unlink: func(request: identity-unlink-request) -> result<identity-ok-response, string>;
+
+    /// Create a new Astrid user.
+    ///
+    /// Returns an ok-response; the created user ID is available in the
+    /// response JSON when accessed via the SDK.
+    identity-create-user: func(request: identity-create-user-request) -> result<identity-ok-response, string>;
+
+    /// List all platform links for an Astrid user.
+    ///
+    /// Returns an ok-response; the links are available in the
+    /// response JSON when accessed via the SDK.
+    identity-list-links: func(request: identity-list-links-request) -> result<identity-ok-response, string>;
+}

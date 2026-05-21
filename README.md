@@ -12,9 +12,58 @@ The Astrid CLI installs the capsule-to-capsule interfaces to `~/.astrid/wit/astr
 
 The kernel-to-capsule contract. Capsules import these interfaces; the kernel provides the implementations. Lives outside `interfaces/` because the consumer set is fixed (the kernel + each SDK that wraps the imports) rather than open-ended.
 
+Each domain is its own package, frozen at a per-file version. A capsule imports only the domains it uses; bumping one domain does not affect capsules that do not import it.
+
 | File | Package | Description |
 |------|---------|-------------|
-| `host/astrid-capsule.wit` | `astrid:capsule@0.1.0` | The 49 host functions across 11 domain-specific interfaces (`fs`, `ipc`, `kv`, `net`, `http`, `sys`, `process`, `elicit`, `approval`, `identity`, `uplink`, `types`) plus the 4 guest exports (`astrid-hook-trigger`, `run`, `astrid-install`, `astrid-upgrade`) that make up the `capsule` world. |
+| `host/fs@1.0.0.wit` | `astrid:fs@1.0.0` | Filesystem operations within the workspace boundary. |
+| `host/ipc@1.0.0.wit` | `astrid:ipc@1.0.0` | Publish/subscribe IPC event bus. |
+| `host/uplink@1.0.0.wit` | `astrid:uplink@1.0.0` | Inbound message ingestion from external platforms. |
+| `host/kv@1.0.0.wit` | `astrid:kv@1.0.0` | Per-capsule, per-principal key-value storage. |
+| `host/net@1.0.0.wit` | `astrid:net@1.0.0` | Unix-domain sockets and gated outbound TCP. |
+| `host/http@1.0.0.wit` | `astrid:http@1.0.0` | HTTP client with SSRF protection and streaming. |
+| `host/sys@1.0.0.wit` | `astrid:sys@1.0.0` | Logging, config, time, caller context, capability introspection. |
+| `host/process@1.0.0.wit` | `astrid:process@1.0.0` | OS-sandboxed host process spawn / kill / read-logs. |
+| `host/elicit@1.0.0.wit` | `astrid:elicit@1.0.0` | Interactive user input during install/upgrade lifecycle. |
+| `host/approval@1.0.0.wit` | `astrid:approval@1.0.0` | Human-in-the-loop approval gate for sensitive actions. |
+| `host/identity@1.0.0.wit` | `astrid:identity@1.0.0` | Multi-platform identity resolve and link. |
+| `host/guest@1.0.0.wit` | `astrid:guest@1.0.0` | Guest export contract — `astrid-hook-trigger`, `run`, `astrid-install`, `astrid-upgrade`. Capsule worlds `include astrid:guest/exports@1.0.0`. |
+
+A capsule's world declares only the imports it uses plus the guest export include:
+
+```wit
+world my-capsule {
+    include astrid:guest/exports@1.0.0;
+    import astrid:ipc/host@1.0.0;
+    import astrid:kv/host@1.0.0;
+    // intentionally not importing net, http, identity, …
+}
+```
+
+### Evolution discipline
+
+Once a `host/<name>@X.Y.Z.wit` file is shipped (i.e. on `main`), it is **immutable forever**. The wasmtime Component Model linker enforces structural typing on every `(package, version)` pair, so any record-field add or function add in a published WIT file causes every capsule built against the prior shape to fail to instantiate. The fix is to never edit a published file in place.
+
+Shape changes ship as a new file at a new version:
+
+```
+host/
+  ipc@1.0.0.wit           # frozen
+  ipc@1.1.0.wit           # frozen (additive change from 1.0.0)
+  ipc@2.0.0.wit           # current (breaking change from 1.x)
+```
+
+To evolve a package:
+
+1. Copy the latest frozen file: `cp host/ipc@1.0.0.wit host/ipc@1.1.0.wit`.
+2. Bump the package declaration inside the new file: `package astrid:ipc@1.1.0;`.
+3. Make your shape changes in the new file.
+4. Leave the existing frozen file untouched.
+5. The kernel registers both versions in its linker (`bindings::ipc_v1_0::add_to_linker` and `bindings::ipc_v1_1::add_to_linker`) so old and new capsules both load.
+
+CI enforces this via `scripts/lint-wit-immutability.sh` — any PR that modifies or deletes a published `*@X.Y.Z.wit` file fails the build.
+
+See [RFC: Host ABI](https://github.com/unicity-astrid/rfcs/pull/22) for the full design (per-domain packages, multi-version kernel registration, frozen-file rule) and [issue #750](https://github.com/unicity-astrid/astrid/issues/750) for the motivating bug.
 
 ## Capsule interfaces (`interfaces/`)
 
@@ -52,13 +101,13 @@ The kernel validates at boot that every required import has a matching export fr
 
 SDKs use `wit-bindgen` (Rust), `ComponentizeJS` (JS/TS), or equivalent toolchains to generate typed bindings from these definitions. The generated types match the IPC payload schemas so capsule authors get compile-time type safety.
 
-The kernel uses `wasmtime::component::bindgen!` against `host/astrid-capsule.wit` to generate the host-side trait the host implementations satisfy.
+The kernel uses `wasmtime::component::bindgen!` against each `host/<name>@<version>.wit` to generate one binding module per `(package, version)` pair. The kernel's linker setup registers every supported version explicitly — there is no implicit version negotiation in the Component Model.
 
 ## Cross-repo coordination
 
 Both kinds of WIT files change rarely but breakingly. The repos that submodule from here are:
 
-- [`unicity-astrid/astrid`](https://github.com/unicity-astrid/astrid) -- kernel (host implementations bound to `host/astrid-capsule.wit`)
+- [`unicity-astrid/astrid`](https://github.com/unicity-astrid/astrid) -- kernel (host implementations bound to each `host/<name>@<version>.wit`)
 - [`unicity-astrid/sdk-rust`](https://github.com/unicity-astrid/sdk-rust) -- Rust SDK (guest bindings + capsule contracts)
 - [`unicity-astrid/sdk-js`](https://github.com/unicity-astrid/sdk-js) -- JavaScript / TypeScript SDK (same)
 
