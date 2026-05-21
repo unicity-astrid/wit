@@ -2,7 +2,7 @@
 ///
 /// Maps external platform identities (Discord user, GitHub user, etc.)
 /// to internal Astrid user IDs. All operations are security-gated per
-/// operation type (resolve, link, unlink, create-user, list-links).
+/// operation type and audit-logged.
 ///
 /// Frozen per the ABI evolution discipline (RFC: host_abi). Shape changes
 /// ship as a new file at a new version path; never edit this file.
@@ -10,6 +10,25 @@
 package astrid:identity@1.0.0;
 
 interface host {
+    /// Typed error returned from identity operations.
+    variant error-code {
+        /// Capsule lacks the `identity` capability.
+        capability-denied,
+        /// Platform / user-id / display-name / method failed
+        /// validation (NUL bytes, control chars, max length).
+        invalid-input,
+        /// User ID does not exist.
+        user-not-found,
+        /// No link exists for the given platform user (resolve / unlink).
+        link-not-found,
+        /// Link already exists (link operation collision).
+        already-linked,
+        /// Identity store is temporarily unavailable.
+        store-unavailable,
+        /// Unspecific host error; detail is best-effort.
+        unknown(string),
+    }
+
     /// Request to resolve a platform identity to an Astrid user.
     record identity-resolve-request {
         /// External platform (e.g. "discord", "github").
@@ -18,25 +37,19 @@ interface host {
         platform-user-id: string,
     }
 
-    /// Result of an identity resolve operation.
+    /// Successful resolution; carries the user info. Returns
+    /// `link-not-found` error instead of a flag-based "found: bool".
     record identity-resolve-response {
-        /// Whether a matching user was found.
-        found: bool,
-        /// The Astrid user ID, if found.
-        user-id: option<string>,
+        /// The Astrid user ID.
+        user-id: string,
         /// The user's display name, if available.
         display-name: option<string>,
-        /// Error message, if the operation failed.
-        error: option<string>,
     }
 
     /// Request to link a platform identity to an Astrid user.
     record identity-link-request {
-        /// External platform (e.g. "discord", "github").
         platform: string,
-        /// User ID on the external platform.
         platform-user-id: string,
-        /// Internal Astrid user ID to link to.
         astrid-user-id: string,
         /// Authentication method (e.g. "passkey", "token").
         method: string,
@@ -44,9 +57,7 @@ interface host {
 
     /// Request to unlink a platform identity.
     record identity-unlink-request {
-        /// External platform.
         platform: string,
-        /// User ID on the external platform.
         platform-user-id: string,
     }
 
@@ -56,44 +67,39 @@ interface host {
         display-name: option<string>,
     }
 
-    /// Request to list platform links for an Astrid user.
-    record identity-list-links-request {
-        /// Internal Astrid user ID.
-        astrid-user-id: string,
+    /// Response from `identity-create-user`.
+    record identity-create-user-response {
+        /// The newly created Astrid user ID.
+        user-id: string,
     }
 
-    /// Result of an identity mutation (link, unlink, create-user, list-links).
-    record identity-ok-response {
-        /// Whether the operation succeeded.
-        ok: bool,
-        /// Error message, if the operation failed.
-        error: option<string>,
-        /// Created user ID (set by create-user on success).
-        user-id: option<string>,
-        /// Whether a link was removed (set by unlink on success).
-        removed: option<bool>,
-        /// JSON-encoded list of platform links (set by list-links on success).
-        links-json: option<string>,
+    /// One platform link in a user's link list.
+    record platform-link {
+        platform: string,
+        platform-user-id: string,
+        /// When the link was created (ISO 8601).
+        linked-at: string,
+        /// Authentication method used at link time.
+        method: string,
     }
 
-    /// Resolve a platform identity to an Astrid user.
-    identity-resolve: func(request: identity-resolve-request) -> result<identity-resolve-response, string>;
+    /// Resolve a platform identity to an Astrid user. Returns
+    /// `link-not-found` if the platform user is not linked to anyone.
+    identity-resolve: func(request: identity-resolve-request) -> result<identity-resolve-response, error-code>;
 
-    /// Link a platform identity to an Astrid user.
-    identity-link: func(request: identity-link-request) -> result<identity-ok-response, string>;
+    /// Link a platform identity to an Astrid user. Returns
+    /// `already-linked` if a link for this (platform, platform-user-id)
+    /// already exists.
+    identity-link: func(request: identity-link-request) -> result<_, error-code>;
 
-    /// Unlink a platform identity.
-    identity-unlink: func(request: identity-unlink-request) -> result<identity-ok-response, string>;
+    /// Unlink a platform identity. Returns `link-not-found` if no link
+    /// exists.
+    identity-unlink: func(request: identity-unlink-request) -> result<_, error-code>;
 
     /// Create a new Astrid user.
-    ///
-    /// Returns an ok-response; the created user ID is available in the
-    /// response JSON when accessed via the SDK.
-    identity-create-user: func(request: identity-create-user-request) -> result<identity-ok-response, string>;
+    identity-create-user: func(request: identity-create-user-request) -> result<identity-create-user-response, error-code>;
 
-    /// List all platform links for an Astrid user.
-    ///
-    /// Returns an ok-response; the links are available in the
-    /// response JSON when accessed via the SDK.
-    identity-list-links: func(request: identity-list-links-request) -> result<identity-ok-response, string>;
+    /// List all platform links for an Astrid user. Returns the
+    /// (possibly empty) link list directly — no JSON blob.
+    identity-list-links: func(astrid-user-id: string) -> result<list<platform-link>, error-code>;
 }
