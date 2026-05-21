@@ -17,7 +17,7 @@ Each domain is its own package, frozen at a per-file version. A capsule imports 
 | File | Package | Description |
 |------|---------|-------------|
 | `host/fs@1.0.0.wit` | `astrid:fs@1.0.0` | Filesystem operations within the workspace boundary — whole-file IO, file handles with positional read/write, metadata, canonicalize, read-link, hard-link. |
-| `host/io@1.0.0.wit` | `astrid:io@1.0.0` | Readiness multiplexing — Astrid-owned `pollable` resource returned by `subscribe-*` methods on other host resources, plus `poll(list<pollable>)` for waiting on N readiness signals at once. Owned (not `wasi:io`) so every readiness operation is audited, principal-scoped, and cancellable. |
+| `host/io@1.0.0.wit` | `astrid:io@1.0.0` | Foundation I/O — three interfaces. `error`: downcastable error resource carried by stream errors. `poll`: Astrid-owned `pollable` resource for readiness multiplexing across heterogeneous host resources. `streams`: `input-stream` / `output-stream` resources with read / write / skip / flush / `splice` for high-throughput host-side byte movement. Shape mirrors `wasi:io@0.2.0` but Astrid-owned — every operation is audited, principal-scoped, cancellable, and quota-bounded. |
 | `host/ipc@1.0.0.wit` | `astrid:ipc@1.0.0` | Publish/subscribe IPC event bus. |
 | `host/uplink@1.0.0.wit` | `astrid:uplink@1.0.0` | Inbound message ingestion from external platforms. |
 | `host/kv@1.0.0.wit` | `astrid:kv@1.0.0` | Per-capsule, per-principal key-value storage with atomic compare-and-swap and paginated key listing. |

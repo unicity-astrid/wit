@@ -12,6 +12,7 @@ package astrid:process@1.0.0;
 
 interface host {
     use astrid:io/poll@1.0.0.{pollable};
+    use astrid:io/streams@1.0.0.{input-stream, output-stream};
 
     /// Typed error returned from process operations.
     variant error-code {
@@ -181,6 +182,30 @@ interface host {
         /// Pollable that fires when stdout / stderr has buffered
         /// data ready to be drained via `read-logs`.
         subscribe-logs: func() -> pollable;
+
+        // ---- Stream halves (high-throughput stdio) ----
+        //
+        // The byte-oriented `read-logs` / `write-stdin` methods above
+        // are the simple-case API: small REPL-style I/O, drained on
+        // demand. The stream halves below are the throughput API: pipe
+        // child stdio to/from a network connection, a file, or another
+        // process via `output-stream.splice` without crossing the WASM
+        // boundary per byte. Pick one access pattern per stream — the
+        // kernel serializes them but interleaving is rarely what you
+        // want.
+
+        /// Child's stdin as an `output-stream`. Bytes written here go
+        /// to the child process. `close-stdin` (or dropping this
+        /// stream) signals EOF.
+        stdin: func() -> result<output-stream, error-code>;
+
+        /// Child's stdout as an `input-stream`. Reads bytes the child
+        /// has written. Surfaces `closed` on child exit + buffer drain.
+        stdout: func() -> result<input-stream, error-code>;
+
+        /// Child's stderr as an `input-stream`. Same semantics as
+        /// `stdout`.
+        stderr: func() -> result<input-stream, error-code>;
     }
 
     /// Spawn a synchronous (blocking) process. Blocks the WASM

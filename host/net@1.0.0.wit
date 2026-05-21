@@ -17,6 +17,7 @@ package astrid:net@1.0.0;
 
 interface host {
     use astrid:io/poll@1.0.0.{pollable};
+    use astrid:io/streams@1.0.0.{input-stream, output-stream};
 
     // -----------------------------------------------------------------
     // Error type
@@ -237,6 +238,31 @@ interface host {
         /// Pollable that fires when the stream is ready to read.
         /// Compose with other pollables for multiplexed I/O.
         subscribe-readable: func() -> pollable;
+
+        // ---- Stream halves (high-throughput byte movement) ----
+
+        /// The read half as an `input-stream`. Use the standard stream
+        /// methods (`read` / `blocking-read` / `skip` / `subscribe`)
+        /// for low-level byte access, or pass the stream into
+        /// `output-stream.splice` to move bytes from this TCP
+        /// connection into another stream without crossing the WASM
+        /// boundary per byte — the throughput primitive for proxy /
+        /// forwarder capsules (e.g. capsule-hosted TCP servers).
+        ///
+        /// `read-stream` and `write-stream` share the underlying
+        /// socket with the per-frame `read` / `write` and per-byte
+        /// `read-bytes` / `write-bytes` methods above; the kernel
+        /// serializes access. Pick one access pattern per use case to
+        /// avoid interleaving surprises.
+        read-stream: func() -> input-stream;
+
+        /// The write half as an `output-stream`. Use `write` /
+        /// `blocking-write-and-flush` for byte writes, or
+        /// `output-stream.splice(input-stream, len)` to forward bytes
+        /// from another stream into this connection. Pollable
+        /// composability via `subscribe` enables back-pressure-aware
+        /// pipelines.
+        write-stream: func() -> output-stream;
     }
 
     // -----------------------------------------------------------------
