@@ -1,4 +1,4 @@
-package astrid:types@1.0.0;
+package astrid-bus:types@1.0.0;
 
 /// Shared types used across Astrid interfaces.
 ///

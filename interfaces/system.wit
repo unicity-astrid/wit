@@ -1,4 +1,4 @@
-package astrid:system@1.0.0;
+package astrid-bus:system@1.0.0;
 
 /// System interface — kernel-emitted lifecycle, health, and CLI envelopes.
 ///

@@ -1,4 +1,4 @@
-package astrid:registry@1.0.0;
+package astrid-bus:registry@1.0.0;
 
 /// Registry interface — LLM provider discovery and model management.
 ///

@@ -1,4 +1,4 @@
-package astrid:tool@1.0.0;
+package astrid-bus:tool@1.0.0;
 
 /// Tool interface — dispatches tool calls to capsule handlers.
 ///
@@ -6,7 +6,7 @@ package astrid:tool@1.0.0;
 /// routes to the appropriate tool capsule via `tool.v1.execute.<name>`,
 /// and collects results on `tool.v1.execute.*.result`.
 interface tool {
-    use astrid:types/types.{tool-call, tool-call-result, tool-definition};
+    use astrid-bus:types/types.{tool-call, tool-call-result, tool-definition};
 
     /// Request to cancel in-flight tool executions.
     record cancel-request {

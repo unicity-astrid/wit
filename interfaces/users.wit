@@ -1,4 +1,4 @@
-package astrid:users@1.0.0;
+package astrid-bus:users@1.0.0;
 
 /// Users interface — within-principal user identity store.
 ///

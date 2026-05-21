@@ -1,4 +1,4 @@
-package astrid:context@1.0.0;
+package astrid-bus:context@1.0.0;
 
 /// Context interface — conversation compaction and token management.
 ///
@@ -6,7 +6,7 @@ package astrid:context@1.0.0;
 /// requests and publishes compaction responses and hooks for plugin
 /// capsules to influence compaction behaviour.
 interface context {
-    use astrid:types/types.{message};
+    use astrid-bus:types/types.{message};
 
     /// Request to compact messages within a token budget.
     record compact-request {
