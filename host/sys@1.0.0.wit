@@ -48,9 +48,11 @@ interface host {
 
     /// Read a configuration value from the capsule's manifest `[config]`.
     ///
-    /// Returns the raw config value string, or empty string if not set.
-    /// String values are returned without JSON-encoding (no extra quotes).
-    get-config: func(key: string) -> result<string, string>;
+    /// Returns the raw config value, or `none` if the key is not set in
+    /// the manifest. String values are returned without JSON-encoding
+    /// (no extra quotes); the empty string is a valid value distinct
+    /// from `none`.
+    get-config: func(key: string) -> result<option<string>, string>;
 
     /// Get the caller context for the current invocation.
     ///

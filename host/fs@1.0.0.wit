@@ -11,14 +11,40 @@
 package astrid:fs@1.0.0;
 
 interface host {
-    /// File metadata returned by `fs-stat`.
+    /// Mode for `fs-open`.
+    enum open-mode {
+        /// Open existing file for reading only. Fails if absent.
+        read,
+        /// Open or create for writing; truncates existing content.
+        write,
+        /// Open or create for writing; appends to existing content.
+        append,
+        /// Open existing file for both reading and writing. Fails if absent.
+        read-write,
+    }
+
+    /// File metadata returned by `fs-stat` and `fs-stat-symlink`.
     record file-stat {
         /// File size in bytes.
         size: u64,
         /// Whether this entry is a directory.
         is-dir: bool,
-        /// Last modification time (UNIX epoch seconds), if available.
-        mtime: option<u64>,
+        /// Whether this entry is a regular file.
+        is-file: bool,
+        /// Whether this entry is a symbolic link. `is-symlink` and either
+        /// `is-dir` or `is-file` may both be true when the link is followed
+        /// by `fs-stat`; `fs-stat-symlink` (lstat) reports the link itself.
+        is-symlink: bool,
+        /// POSIX mode bits (file type + permissions). Zero on platforms
+        /// without a mode concept.
+        mode: u32,
+        /// Last modification time, nanoseconds since UNIX epoch. `none`
+        /// if the host filesystem doesn't track it.
+        mtime-ns: option<u64>,
+        /// Creation time (birth time), nanoseconds since UNIX epoch.
+        ctime-ns: option<u64>,
+        /// Last access time, nanoseconds since UNIX epoch.
+        atime-ns: option<u64>,
     }
 
     /// Check whether a file or directory exists at the given path.
@@ -38,10 +64,16 @@ interface host {
     /// Security-gated: requires file-read capability.
     fs-readdir: func(path: string) -> result<list<string>, string>;
 
-    /// Get file metadata (size, type, mtime).
+    /// Get file metadata (size, type, mtime). Follows symlinks.
     ///
     /// Security-gated: requires file-read capability.
     fs-stat: func(path: string) -> result<file-stat, string>;
+
+    /// Like `fs-stat` but does NOT follow symlinks — reports the symlink
+    /// itself when `path` is a link. Mirrors `std::fs::symlink_metadata`.
+    ///
+    /// Security-gated: requires file-read capability.
+    fs-stat-symlink: func(path: string) -> result<file-stat, string>;
 
     /// Remove a file at the given path.
     ///
@@ -91,4 +123,69 @@ interface host {
     /// (files + subdirectories).
     /// Security-gated: requires file-write capability.
     fs-remove-dir-all: func(path: string) -> result<u64, string>;
+
+    /// Resolve a path to its canonical absolute form, following symlinks.
+    /// Mirrors `std::fs::canonicalize`.
+    ///
+    /// The returned path is guaranteed to resolve within the same VFS
+    /// scheme as the input. Resolutions that would escape the input's
+    /// VFS scope return an error rather than leak host-filesystem
+    /// information.
+    /// Security-gated: requires file-read capability.
+    fs-canonicalize: func(path: string) -> result<string, string>;
+
+    /// Read the target of a symbolic link without following it.
+    /// Mirrors `std::fs::read_link`.
+    ///
+    /// The returned target is guaranteed to resolve within the same VFS
+    /// scheme as the input. Links pointing outside the scope return an
+    /// error.
+    /// Security-gated: requires file-read capability.
+    fs-read-link: func(path: string) -> result<string, string>;
+
+    // -----------------------------------------------------------------
+    // File handles — for streamed and positional I/O on large files
+    // -----------------------------------------------------------------
+    //
+    // The whole-file `read-file` / `write-file` / `fs-append` calls have
+    // a 10 MB upper bound; handle-based I/O is the escape valve for
+    // capsules processing large blobs (logs, models, databases, parquet,
+    // image/video media). Max 16 open file handles per capsule.
+
+    /// Open a file and return a handle. Mirrors `std::fs::OpenOptions`.
+    ///
+    /// `mode` controls read/write intent (see `open-mode`). The handle
+    /// must be closed with `fs-close` when no longer needed; the host
+    /// reaps handles on capsule unload.
+    /// Security-gated: requires file-read and/or file-write capability
+    /// matching the open mode.
+    fs-open: func(path: string, mode: open-mode) -> result<u64, string>;
+
+    /// Read up to `max-bytes` from the file at byte offset `offset`.
+    /// Mirrors POSIX `pread(2)`. Returns the bytes read; an empty list
+    /// signals EOF at the requested offset.
+    ///
+    /// Per-call payload capped at 1 MB so the WASM linear memory stays
+    /// healthy on large files; callers loop with advancing offsets.
+    /// Security-gated: the handle must have been opened with read
+    /// permission.
+    fs-read-at: func(handle: u64, offset: u64, max-bytes: u32) -> result<list<u8>, string>;
+
+    /// Write `data` to the file at byte offset `offset`. Mirrors POSIX
+    /// `pwrite(2)`. Returns the number of bytes actually written.
+    ///
+    /// Per-call payload capped at 1 MB.
+    /// Security-gated: the handle must have been opened with write
+    /// permission.
+    fs-write-at: func(handle: u64, offset: u64, data: list<u8>) -> result<u32, string>;
+
+    /// Flush buffered writes for `handle` to disk. Mirrors
+    /// `std::fs::File::sync_data`.
+    /// Security-gated: the handle must have been opened with write
+    /// permission.
+    fs-flush: func(handle: u64) -> result<_, string>;
+
+    /// Close a file handle. Idempotent — closing an already-closed
+    /// handle is a no-op.
+    fs-close: func(handle: u64) -> result<_, string>;
 }

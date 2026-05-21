@@ -25,8 +25,11 @@ interface host {
         method: string,
         /// Request headers as key-value pairs.
         headers: list<key-value-pair>,
-        /// Optional request body.
-        body: option<string>,
+        /// Optional request body as raw bytes. JSON/text callers
+        /// encode their string payload to UTF-8 bytes; binary uploads
+        /// (image, protobuf, multipart) pass their bytes directly
+        /// without lossy string conversion.
+        body: option<list<u8>>,
     }
 
     /// HTTP response returned by the host.

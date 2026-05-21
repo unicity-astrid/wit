@@ -40,10 +40,10 @@ interface host {
 
     /// Bind and activate the pre-provisioned Unix socket listener.
     ///
-    /// Security-gated: requires net-bind capability. The listener handle
-    /// argument is ignored (single pre-bound listener per capsule).
-    /// Returns a listener handle.
-    net-bind-unix: func(listener-handle: u64) -> result<u64, string>;
+    /// Security-gated: requires net-bind capability. The kernel binds a
+    /// single Unix listener per capsule at load time and returns its
+    /// handle on activation.
+    net-bind-unix: func() -> result<u64, string>;
 
     /// Blocking accept: wait for the next client connection.
     ///
@@ -52,11 +52,12 @@ interface host {
     /// the capsule is unloaded. Returns a stream handle ID.
     net-accept: func(listener-handle: u64) -> result<u64, string>;
 
-    /// Non-blocking accept with a 10ms timeout.
+    /// Polling accept with a caller-controlled timeout.
     ///
-    /// Returns a stream handle ID if a connection was accepted,
-    /// or none if no pending connections or the capsule is unloading.
-    net-poll-accept: func(listener-handle: u64) -> result<option<u64>, string>;
+    /// Blocks up to `timeout-ms` (capped at 60,000 by the host) waiting
+    /// for the next client connection. Returns a stream handle ID if a
+    /// connection arrived in that window, or `none` if it didn't.
+    net-poll-accept: func(listener-handle: u64, timeout-ms: u64) -> result<option<u64>, string>;
 
     /// Read the next length-prefixed frame from a stream.
     ///
@@ -229,9 +230,8 @@ interface host {
 
     /// Receive up to `max-bytes` from the socket. Blocks up to the
     /// socket's read timeout (defaults to non-blocking ~50 ms poll).
-    /// Returns an empty data list with sentinel peer (`""`/`0`) if no
-    /// datagram was available.
-    udp-recv-from: func(socket: u64, max-bytes: u32) -> result<udp-datagram, string>;
+    /// Returns `none` if no datagram was available in the window.
+    udp-recv-from: func(socket: u64, max-bytes: u32) -> result<option<udp-datagram>, string>;
 
     /// Set the read timeout for `udp-recv-from`. `none` clears it
     /// (recv returns immediately when no data is queued).
@@ -242,4 +242,17 @@ interface host {
 
     /// Close a UDP socket handle. Idempotent.
     udp-close: func(socket: u64) -> result<_, string>;
+
+    /// Resolve a hostname to a list of `"ip"` or `"ip:port"` strings
+    /// (the latter when the input was `"host:port"`). Mirrors
+    /// `std::net::ToSocketAddrs::to_socket_addrs`.
+    ///
+    /// The SSRF airlock applies to each resolved IP — private,
+    /// loopback, link-local, multicast, and unspecified ranges are
+    /// stripped from the returned list. An empty list means resolution
+    /// succeeded but every result was airlock-rejected.
+    ///
+    /// Security-gated: requires `net_connect` or `net_udp` capability.
+    /// Hostnames must match an entry in either allowlist.
+    net-lookup-host: func(host: string) -> result<list<string>, string>;
 }

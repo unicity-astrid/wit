@@ -22,10 +22,29 @@ interface host {
     /// Delete a key.
     kv-delete: func(key: string) -> result<_, string>;
 
-    /// List all keys matching a prefix.
+    /// A page of keys returned by `kv-list-keys-page`.
+    record key-page {
+        /// Keys matching the prefix in this page.
+        keys: list<string>,
+        /// Cursor to pass to the next `kv-list-keys-page` call. `none`
+        /// when this is the last page.
+        next-cursor: option<string>,
+    }
+
+    /// List all keys matching a prefix. Convenience for small stores
+    /// where the caller is sure the result fits.
     ///
-    /// Returns a list of matching key strings.
+    /// Capped server-side at 1024 keys per call — larger result sets
+    /// return an error directing the caller to `kv-list-keys-page`.
     kv-list-keys: func(prefix: string) -> result<list<string>, string>;
+
+    /// Paginated key listing for unbounded stores. Mirrors a generic
+    /// cursor-based listing API.
+    ///
+    /// Pass `none` for `cursor` on the first call and the cursor
+    /// returned in `next-cursor` on subsequent calls. `limit` is capped
+    /// at 1024 per page; 0 means "use the server default."
+    kv-list-keys-page: func(prefix: string, cursor: option<string>, limit: u32) -> result<key-page, string>;
 
     /// Delete all keys matching a prefix.
     ///

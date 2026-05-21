@@ -16,14 +16,14 @@ Each domain is its own package, frozen at a per-file version. A capsule imports 
 
 | File | Package | Description |
 |------|---------|-------------|
-| `host/fs@1.0.0.wit` | `astrid:fs@1.0.0` | Filesystem operations within the workspace boundary. |
+| `host/fs@1.0.0.wit` | `astrid:fs@1.0.0` | Filesystem operations within the workspace boundary — whole-file IO, file handles with positional read/write, metadata, canonicalize, read-link. |
 | `host/ipc@1.0.0.wit` | `astrid:ipc@1.0.0` | Publish/subscribe IPC event bus. |
 | `host/uplink@1.0.0.wit` | `astrid:uplink@1.0.0` | Inbound message ingestion from external platforms. |
-| `host/kv@1.0.0.wit` | `astrid:kv@1.0.0` | Per-capsule, per-principal key-value storage. |
-| `host/net@1.0.0.wit` | `astrid:net@1.0.0` | Unix-domain sockets, gated outbound TCP, and gated UDP. |
+| `host/kv@1.0.0.wit` | `astrid:kv@1.0.0` | Per-capsule, per-principal key-value storage with atomic compare-and-swap and paginated key listing. |
+| `host/net@1.0.0.wit` | `astrid:net@1.0.0` | Unix-domain sockets, gated outbound TCP, gated UDP, gated DNS resolution. |
 | `host/http@1.0.0.wit` | `astrid:http@1.0.0` | HTTP client with SSRF protection and streaming. |
 | `host/sys@1.0.0.wit` | `astrid:sys@1.0.0` | Logging, config, time, caller context, entropy, sleep, capability introspection. |
-| `host/process@1.0.0.wit` | `astrid:process@1.0.0` | OS-sandboxed host process spawn (with stdin/env/cwd), signal, kill, read-logs. |
+| `host/process@1.0.0.wit` | `astrid:process@1.0.0` | OS-sandboxed host process spawn (with stdin/env/cwd), wait, signal, kill, read-logs, stdin streaming. |
 | `host/elicit@1.0.0.wit` | `astrid:elicit@1.0.0` | Interactive user input during install/upgrade lifecycle. |
 | `host/approval@1.0.0.wit` | `astrid:approval@1.0.0` | Human-in-the-loop approval gate for sensitive actions. |
 | `host/identity@1.0.0.wit` | `astrid:identity@1.0.0` | Multi-platform identity resolve and link. |
