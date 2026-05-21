@@ -192,6 +192,32 @@ interface host {
     /// Mirrors `std::net::TcpStream::ttl`.
     net-ttl: func(stream-handle: u64) -> result<u32, string>;
 
+    /// Enable TCP keepalive on `stream`. `none` disables; `some(secs)`
+    /// turns it on with that interval between probes. Required for
+    /// long-lived TCP connections (message brokers, DBs, IPC bridges)
+    /// to detect silently-dead peers — without it, a half-dead
+    /// connection holds the stream open until the next explicit write.
+    ///
+    /// Mirrors `socket2::SockRef::set_tcp_keepalive`. Returns an error
+    /// for Unix-domain stream handles (keepalive is TCP-only).
+    net-set-keepalive: func(stream-handle: u64, keepalive-secs: option<u64>) -> result<_, string>;
+
+    /// Return the current keepalive setting, or `none` if disabled.
+    net-keepalive: func(stream-handle: u64) -> result<option<u64>, string>;
+
+    /// Set `SO_LINGER` on `stream`. `none` clears it (default graceful
+    /// FIN close); `some(0)` causes an immediate RST with unsent data
+    /// dropped on close; `some(t)` waits up to `t` ms for unsent data
+    /// to drain before closing. Mirrors `std::net::TcpStream::set_linger`.
+    ///
+    /// Useful for capsules tearing down a connection without waiting
+    /// for the kernel-side TCP buffer to drain (testing, fast shutdown,
+    /// resource-constrained reconnect cycles).
+    net-set-linger: func(stream-handle: u64, linger-ms: option<u64>) -> result<_, string>;
+
+    /// Return the current `SO_LINGER` value, or `none` if unset.
+    net-linger: func(stream-handle: u64) -> result<option<u64>, string>;
+
     // -----------------------------------------------------------------
     // UDP — datagram sockets
     // -----------------------------------------------------------------
