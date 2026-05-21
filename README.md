@@ -27,18 +27,30 @@ Each domain is its own package, frozen at a per-file version. A capsule imports 
 | `host/elicit@1.0.0.wit` | `astrid:elicit@1.0.0` | Interactive user input during install/upgrade lifecycle. |
 | `host/approval@1.0.0.wit` | `astrid:approval@1.0.0` | Human-in-the-loop approval gate for sensitive actions. |
 | `host/identity@1.0.0.wit` | `astrid:identity@1.0.0` | Multi-platform identity resolve and link. |
-| `host/guest@1.0.0.wit` | `astrid:guest@1.0.0` | Guest export contract — `astrid-hook-trigger`, `run`, `astrid-install`, `astrid-upgrade`. Capsule worlds `include astrid:guest/exports@1.0.0`. |
+| `host/guest@1.0.0.wit` | `astrid:guest@1.0.0` | Guest export contract — `astrid-hook-trigger`, `run`, `astrid-install`, `astrid-upgrade`. Each entry point lives in its own world (`interceptor`, `background`, `installable`, `upgradable`) so capsules `include` only what they implement. |
 
-A capsule's world declares only the imports it uses plus the guest export include:
+A capsule's world declares only the imports it uses plus the guest-export worlds it actually implements:
 
 ```wit
-world my-capsule {
-    include astrid:guest/exports@1.0.0;
+// Interceptor-only capsule:
+world router {
+    include astrid:guest/interceptor@1.0.0;
     import astrid:ipc/host@1.0.0;
-    import astrid:kv/host@1.0.0;
     // intentionally not importing net, http, identity, …
 }
+
+// Run-loop capsule with an install hook:
+world cli {
+    include astrid:guest/interceptor@1.0.0;
+    include astrid:guest/background@1.0.0;
+    include astrid:guest/installable@1.0.0;
+    import astrid:ipc/host@1.0.0;
+    import astrid:uplink/host@1.0.0;
+    import astrid:net/host@1.0.0;
+}
 ```
+
+Per-export worlds matter: the wasm32-wasip2 toolchain auto-stubs every export declared in a world the component targets. Bundling all four entry points into one mandatory world forced stubs for the unused ones, which then required kernel-side parsing to distinguish real implementations from toolchain stubs. With per-export worlds, an export only appears in the wasm binary when the capsule actually implements it.
 
 ### Evolution discipline
 

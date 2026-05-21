@@ -1,11 +1,32 @@
 /// Guest export contract — lifecycle and interceptor entry points the
 /// kernel calls into a capsule.
 ///
-/// A capsule that handles interceptor hooks, runs a background loop, or
-/// participates in install/upgrade lifecycle phases includes the `exports`
-/// world below in its own world declaration. Each export is optional at
-/// the kernel level — the kernel introspects which exports the capsule
-/// actually provides and only calls those.
+/// Each entry point lives in its own world so capsules `include` only the
+/// ones they actually implement. The CM toolchain auto-stubs every export
+/// declared in a world the component targets; co-mingling optional exports
+/// in a single world forces stubs for unused ones and pushes the kernel
+/// into parsing the wasm binary to detect them. Per-export worlds put the
+/// declaration where the implementation is, and the kernel sees exports
+/// only when they are real.
+///
+/// Typical capsule worlds:
+///
+/// ```wit
+/// // Interceptor-only capsule (e.g. router):
+/// world my-capsule {
+///     include astrid:guest/interceptor@1.0.0;
+///     import astrid:ipc/host@1.0.0;
+/// }
+///
+/// // Run-loop capsule with install hook (e.g. cli uplink):
+/// world my-capsule {
+///     include astrid:guest/interceptor@1.0.0;
+///     include astrid:guest/background@1.0.0;
+///     include astrid:guest/installable@1.0.0;
+///     import astrid:ipc/host@1.0.0;
+///     import astrid:uplink/host@1.0.0;
+/// }
+/// ```
 ///
 /// The package is named `astrid:guest` to mirror the per-domain `host`
 /// packages: `host` interfaces are kernel-side (imported by capsules),
@@ -29,39 +50,40 @@ interface lifecycle {
     }
 }
 
-/// Guest exports a capsule provides to the kernel.
+/// Interceptor entry point.
 ///
-/// Capsule worlds `include astrid:guest/exports@1.0.0` to declare these
-/// entry points. The kernel calls only the exports a capsule actually
-/// implements; unimplemented exports are skipped without error.
-world exports {
+/// Almost every capsule includes this. The kernel calls `astrid-hook-trigger`
+/// with an action name (interceptor handler to invoke) and an event payload
+/// as raw bytes. The guest returns a `capsule-result` directing the kernel
+/// how to proceed.
+world interceptor {
     use lifecycle.{capsule-result};
 
-    /// Execute an interceptor hook.
-    ///
-    /// The primary entry point for hook/interceptor execution. The kernel
-    /// passes the action name (interceptor handler to invoke) and the event
-    /// payload as raw bytes. The guest returns a result directing the kernel
-    /// how to proceed.
     export astrid-hook-trigger: func(action: string, payload: list<u8>) -> capsule-result;
+}
 
-    /// Background run loop for long-lived capsules.
-    ///
-    /// Capsules that export `run` are started as background tasks. The
-    /// function should block indefinitely (event loop pattern), processing
-    /// IPC messages via subscriptions set up before calling `signal-ready`.
-    /// The kernel manages the lifecycle.
+/// Background run loop.
+///
+/// Capsules that export `run` are started as background tasks. The function
+/// should block indefinitely (event loop pattern), processing IPC messages
+/// via subscriptions set up before calling `signal-ready`. The kernel
+/// manages the lifecycle.
+world background {
     export run: func();
+}
 
-    /// Lifecycle hook: first-time installation.
-    ///
-    /// Called once when a capsule is installed. May use `elicit` to collect
-    /// secrets and configuration from the user interactively.
+/// First-time installation lifecycle hook.
+///
+/// Called once when a capsule is installed. May use `elicit` to collect
+/// secrets and configuration from the user interactively.
+world installable {
     export astrid-install: func();
+}
 
-    /// Lifecycle hook: upgrade from a previous version.
-    ///
-    /// Called when a capsule is upgraded. May use `elicit` to collect new
-    /// configuration.
+/// Upgrade lifecycle hook.
+///
+/// Called when a capsule is upgraded from a previous version. May use
+/// `elicit` to collect new configuration.
+world upgradable {
     export astrid-upgrade: func();
 }
