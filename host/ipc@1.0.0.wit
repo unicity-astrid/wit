@@ -125,6 +125,18 @@ interface host {
     /// Publish a UTF-8 JSON payload to a topic. Principal is
     /// automatically attributed from the caller's invocation context
     /// as `verified`.
+    ///
+    /// Re-entrancy: publish does NOT synchronously invoke subscribers.
+    /// Subscribers receive the message on their next `recv`/`poll`.
+    /// Publishing from within an interceptor handler is allowed but
+    /// counts against the per-invocation publish-depth budget (host
+    /// default: 8) to prevent unbounded reentry.
+    ///
+    /// Fan-out: a single publish dispatches to at most 256 matching
+    /// subscribers; further matches return `backpressure` (the kernel
+    /// preserves the first 256 deliveries and counts the rest as
+    /// dropped in subscribers' lag/drop counters).
+    ///
     /// Audit: recorded.
     publish: func(topic: string, payload: string) -> result<_, error-code>;
 

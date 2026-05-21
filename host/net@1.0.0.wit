@@ -249,9 +249,16 @@ interface host {
     /// Requires `net_connect` allowlist match.
     connect-tcp: func(host: string, port: u16) -> result<tcp-stream, error-code>;
 
-    /// Bind a UDP socket. `"0.0.0.0"` / `"::"` accepts on any
-    /// interface (NB: capsule becomes reachable from any peer on the
-    /// network — restrict via `net_udp` capability if outbound-only).
+    /// Bind a UDP socket.
+    ///
+    /// Bind addresses other than `127.0.0.1` / `::1` make the capsule
+    /// reachable from outside the host — `"0.0.0.0"` / `"::"` exposes
+    /// the socket to every network interface, which is a server
+    /// posture, not a client posture. Restrict in `Capsule.toml
+    /// [capabilities] net_udp` to loopback-only patterns
+    /// (`"bind:127.0.0.1:*"` / `"bind:[::1]:*"`) unless the capsule
+    /// genuinely needs to serve.
+    ///
     /// Port `0` selects an ephemeral port.
     udp-bind: func(host: string, port: u16) -> result<udp-socket, error-code>;
 
