@@ -98,13 +98,12 @@ interface host {
     }
 
     // -----------------------------------------------------------------
-    // TCP listener (Unix-domain only in 1.0; TCP listener deferred)
+    // Listeners (Unix-domain + TCP)
     // -----------------------------------------------------------------
 
     /// The capsule's pre-bound Unix domain listener. One per capsule;
     /// the kernel binds it at load time and the capsule activates it
-    /// with `bind-unix`. TCP listeners (`bind-tcp`) are deferred — the
-    /// `inbound webhook receiver` use case can wait for 1.x.
+    /// with `bind-unix`.
     resource unix-listener {
         /// Blocking accept. Performs peer credential verification
         /// (UID match on Unix) and session token handshake.
@@ -118,6 +117,27 @@ interface host {
         /// Pollable that fires when a connection is ready to be
         /// accepted. Compose with other pollables via
         /// `wasi:io/poll.poll` for multiplexed I/O.
+        subscribe-readiness: func() -> pollable;
+    }
+
+    /// A bound TCP listener accepting inbound connections from the
+    /// network. For self-hosted webhook receivers, gRPC endpoints,
+    /// Prometheus scrape ports, etc. Distinct from `unix-listener`
+    /// which serves only locally-authenticated clients on the
+    /// kernel's pre-bound Unix socket.
+    ///
+    /// Per-capsule cap: 4 TCP listeners. Drop closes the socket.
+    resource tcp-listener {
+        /// Blocking accept for an inbound TCP connection.
+        accept: func() -> result<tcp-stream, error-code>;
+
+        /// Polling accept with caller-controlled timeout.
+        poll-accept: func(timeout-ms: u64) -> result<option<tcp-stream>, error-code>;
+
+        /// Local bind address as `"ip:port"`.
+        local-addr: func() -> result<string, error-code>;
+
+        /// Pollable that fires when a connection is ready to accept.
         subscribe-readiness: func() -> pollable;
     }
 
@@ -204,6 +224,14 @@ interface host {
         set-linger: func(linger-ms: option<u64>) -> result<_, error-code>;
         linger: func() -> result<option<u64>, error-code>;
 
+        /// `SO_REUSEADDR`. Useful for accepted connections from a
+        /// `tcp-listener` so the listener can re-bind to the same
+        /// port immediately after a restart without waiting for
+        /// TIME_WAIT to expire. Has no effect on outbound streams.
+        /// Returns `not-tcp` for Unix-domain streams.
+        set-reuseaddr: func(reuse: bool) -> result<_, error-code>;
+        reuseaddr: func() -> result<bool, error-code>;
+
         // ---- Readiness ----
 
         /// Pollable that fires when the stream is ready to read.
@@ -215,10 +243,19 @@ interface host {
     // UDP socket resource
     // -----------------------------------------------------------------
 
-    /// A UDP datagram socket. Bind once; send/recv to/from arbitrary
-    /// peers (SSRF airlock applies on each peer). Connected-UDP mode
-    /// (lock to one peer for performance) is deferred to 1.x.
+    /// A UDP datagram socket. Two modes:
+    ///
+    /// 1. **Unconnected** (default after `udp-bind`) — use `send-to` /
+    ///    `recv-from` with per-call peer addressing. SSRF airlock
+    ///    applies on every send.
+    /// 2. **Connected** (after `connect`) — use `send` / `recv`
+    ///    without per-call peer. SSRF airlock applies once at
+    ///    connect time; the kernel filters out datagrams from peers
+    ///    other than the connected one. Faster syscall path for
+    ///    chatty protocols (QUIC, DNS-over-UDP, syslog-over-UDP).
     resource udp-socket {
+        // ---- Unconnected-mode I/O ----
+
         /// Send to a peer. Returns bytes sent.
         send-to: func(data: list<u8>, peer-host: string, peer-port: u16) -> result<u32, error-code>;
 
@@ -226,7 +263,35 @@ interface host {
         /// within the read timeout.
         recv-from: func(max-bytes: u32) -> result<option<udp-datagram>, error-code>;
 
-        /// Set the read timeout for `recv-from`.
+        // ---- Connected-mode I/O ----
+
+        /// Lock this socket to a single peer. SSRF airlock runs on
+        /// the peer address once. After connect, `send` / `recv`
+        /// work without per-call peer arguments, and the kernel
+        /// filters out datagrams from any peer other than this one.
+        /// Calling `connect` again rebinds to the new peer.
+        connect: func(peer-host: string, peer-port: u16) -> result<_, error-code>;
+
+        /// Unbind from the connected peer; reverts to unconnected
+        /// mode (send-to / recv-from with per-call peer).
+        disconnect: func() -> result<_, error-code>;
+
+        /// Send to the connected peer. Returns bytes sent. Errors
+        /// with `not-tcp`-equivalent (`unknown` arm — TODO future
+        /// `not-connected` variant) if the socket is unconnected.
+        send: func(data: list<u8>) -> result<u32, error-code>;
+
+        /// Receive from the connected peer. `none` if no datagram
+        /// arrived within the read timeout.
+        recv: func(max-bytes: u32) -> result<option<list<u8>>, error-code>;
+
+        /// Currently connected peer as `"ip:port"`. `none` if the
+        /// socket is unconnected.
+        peer-addr: func() -> result<option<string>, error-code>;
+
+        // ---- Common ----
+
+        /// Set the read timeout for `recv-from` / `recv`.
         set-read-timeout: func(timeout-ms: option<u64>) -> result<_, error-code>;
 
         /// Local bound address as `"ip:port"`.
@@ -243,6 +308,16 @@ interface host {
     /// Bind and activate the pre-provisioned Unix listener. The kernel
     /// binds it at load time per capsule.
     bind-unix: func() -> result<unix-listener, error-code>;
+
+    /// Bind a TCP listener for inbound connections.
+    ///
+    /// `"0.0.0.0"` / `"::"` exposes the listener to every network
+    /// interface (server posture) — restrict in `Capsule.toml
+    /// [capabilities] net_tcp_bind` to loopback-only patterns unless
+    /// the capsule genuinely needs to serve. Port `0` selects an
+    /// ephemeral port. Gated by a `net_tcp_bind` capability allowlist
+    /// distinct from `net_connect`.
+    bind-tcp: func(host: string, port: u16) -> result<tcp-listener, error-code>;
 
     /// Open an outbound TCP connection to `host:port`. Goes through
     /// the SSRF airlock (resolves DNS, rejects private/loopback/etc.).

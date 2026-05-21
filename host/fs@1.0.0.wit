@@ -190,10 +190,20 @@ interface host {
     /// (rather than collapsing access-denied into "doesn't exist").
     fs-exists: func(path: string) -> result<bool, error-code>;
 
+    /// Create a directory. Mirrors `std::fs::create_dir` /
+    /// `mkdir(2)`. Strict — fails with `already-exists` if the path
+    /// exists, and fails with `not-found` if the parent directory
+    /// does not exist. Use this for lock-dir patterns and exclusive
+    /// scratch dirs where the race "another writer got here first"
+    /// matters. For the "ensure this exists" pattern use
+    /// `fs-mkdir-all`.
+    fs-mkdir: func(path: string) -> result<_, error-code>;
+
     /// Create a directory and all missing parents. Mirrors
     /// `std::fs::create_dir_all`. Idempotent — succeeds if the
-    /// directory already exists.
-    fs-mkdir: func(path: string) -> result<_, error-code>;
+    /// directory already exists. For the strict "must not exist"
+    /// variant use `fs-mkdir`.
+    fs-mkdir-all: func(path: string) -> result<_, error-code>;
 
     /// List entries in a directory. Returns entry names (not full
     /// paths). Per-call cap: 4096 entries; larger directories must use
@@ -258,4 +268,18 @@ interface host {
     /// Mirrors `std::fs::read_link`. Returns a VFS-scheme path; links
     /// pointing outside the input's scope return `boundary-escape`.
     fs-read-link: func(path: string) -> result<string, error-code>;
+
+    /// Create a hard link from `link-path` to `src`. Mirrors
+    /// `std::fs::hard_link`. Both paths must resolve to the same VFS
+    /// scheme; cross-scheme links return `cross-vfs`. Cannot link
+    /// directories. The kernel enforces that both endpoints stay
+    /// inside the VFS scope at link time.
+    ///
+    /// (Symlink creation — `fs-symlink` — is deliberately omitted: it
+    /// allows capsules to encode boundary-escape paths into the
+    /// workspace, and the read-only `fs-read-link` / `fs-stat-symlink`
+    /// pair is sufficient for handling existing symlinks. Revisit if
+    /// a concrete use case emerges with a security model.)
+    /// Security-gated: requires file-write capability on both paths.
+    fs-hard-link: func(src: string, link-path: string) -> result<_, error-code>;
 }

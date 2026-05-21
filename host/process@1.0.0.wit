@@ -11,6 +11,8 @@
 package astrid:process@1.0.0;
 
 interface host {
+    use wasi:io/poll@0.2.0.{pollable};
+
     /// Typed error returned from process operations.
     variant error-code {
         /// Capsule lacks the `host_process` capability.
@@ -157,6 +159,28 @@ interface host {
         /// Returns exit-info on exit, `wait-timeout` error if the
         /// timeout elapsed first.
         wait: func(timeout-ms: option<u64>) -> result<exit-info, error-code>;
+
+        /// Wait for the process to exit AND drain remaining stdout /
+        /// stderr buffers atomically. Mirrors
+        /// `std::process::Child::wait_with_output`. Closes the
+        /// read-logs race for short-lived children that may have
+        /// terminal output not yet drained when `wait` observes exit.
+        wait-with-output: func(timeout-ms: option<u64>) -> result<process-result, error-code>;
+
+        /// The OS-level PID of the process. Useful for capsules that
+        /// correlate kernel-level events (cgroup IDs, /proc paths)
+        /// with child processes that log their own PID. Returns
+        /// `closed` if the process has already been reaped.
+        os-pid: func() -> result<u32, error-code>;
+
+        /// Pollable that fires when the process has exited. Compose
+        /// with other pollables to multiplex "wait on child OR
+        /// receive IPC event."
+        subscribe-exit: func() -> pollable;
+
+        /// Pollable that fires when stdout / stderr has buffered
+        /// data ready to be drained via `read-logs`.
+        subscribe-logs: func() -> pollable;
     }
 
     /// Spawn a synchronous (blocking) process. Blocks the WASM

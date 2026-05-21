@@ -11,6 +11,8 @@
 package astrid:http@1.0.0;
 
 interface host {
+    use wasi:io/poll@0.2.0.{pollable};
+
     /// Typed error returned from every fallible http operation.
     variant error-code {
         /// Capsule lacks the `net` capability.
@@ -107,6 +109,12 @@ interface host {
         /// Close the stream explicitly. Idempotent. Equivalent to
         /// dropping the resource.
         close: func() -> result<_, error-code>;
+
+        /// Pollable that fires when the next chunk is ready to read
+        /// (or EOF has arrived). Compose with other pollables for
+        /// multiplexed I/O — e.g. a capsule streaming an HTTP
+        /// response while also handling IPC requests.
+        subscribe-readable: func() -> pollable;
     }
 
     /// Perform a buffered HTTP request (full response in memory).
