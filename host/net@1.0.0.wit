@@ -16,7 +16,7 @@
 package astrid:net@1.0.0;
 
 interface host {
-    use wasi:io/poll@0.2.0.{pollable};
+    use astrid:io/poll@1.0.0.{pollable};
 
     // -----------------------------------------------------------------
     // Error type
@@ -116,7 +116,7 @@ interface host {
 
         /// Pollable that fires when a connection is ready to be
         /// accepted. Compose with other pollables via
-        /// `wasi:io/poll.poll` for multiplexed I/O.
+        /// `astrid:io/poll.poll` for multiplexed I/O.
         subscribe-readiness: func() -> pollable;
     }
 

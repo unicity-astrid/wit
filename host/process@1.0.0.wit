@@ -11,7 +11,7 @@
 package astrid:process@1.0.0;
 
 interface host {
-    use wasi:io/poll@0.2.0.{pollable};
+    use astrid:io/poll@1.0.0.{pollable};
 
     /// Typed error returned from process operations.
     variant error-code {

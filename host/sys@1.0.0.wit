@@ -1,12 +1,19 @@
 /// System-level runtime functions: logging, config, time, caller context,
 /// entropy, sleep, capability introspection.
 ///
-/// Astrid does not expose `wasi:random`, `wasi:clocks`, or other generic
-/// WASI primitives to capsules (only `wasi:io/poll` + `wasi:io/streams`
-/// are retained as Component Model foundation types). Every other host
-/// call is gated, principal-scoped, and audited — primitives capsules
-/// need (random bytes, monotonic clock, sleep) live here so they go
-/// through the same audit/principal layer.
+/// Astrid does not expose any `wasi:*` interfaces to capsules. The host
+/// ABI is fully Astrid-owned: every call is gated, principal-scoped,
+/// audited, and dispatched through the kernel's capability layer.
+/// Readiness multiplexing — the one place capsules historically reached
+/// for `wasi:io/poll` — is provided by Astrid's own `astrid:io/poll@1.0.0`
+/// interface. Primitives capsules need (random bytes, monotonic clock,
+/// sleep) live in this `sys` package for the same reason: a single
+/// audit/principal layer covering every host call.
+///
+/// This namespace ownership matters for the unikernel target as well —
+/// when Astrid ships on hermit-rs, the WIT contract is unchanged and the
+/// kernel-side impls dispatch to unikernel syscalls instead of
+/// wasmtime-wasi-backed futures.
 ///
 /// Frozen per the ABI evolution discipline (RFC: host_abi). Shape changes
 /// ship as a new file at a new version path; never edit this file.
