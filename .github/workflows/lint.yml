@@ -36,16 +36,21 @@ jobs:
       - name: Install wasm-tools
         run: cargo install --locked wasm-tools
 
-      - name: Parse every WIT file
+      - name: Parse every host/*.wit file
+        # Only host/ — each host package is self-contained (no cross-package
+        # `use`), so single-file mode works. interfaces/ files cross-reference
+        # each other (e.g. `use astrid:types/types.{...}`) and would require a
+        # deps/ tree to resolve; they predate this CI and are validated by
+        # downstream SDK builds.
         run: |
           fail=0
-          for f in $(find host interfaces -name '*.wit' 2>/dev/null); do
-            if ! wasm-tools component wit "$f" >/dev/null 2>&1; then
+          for f in host/*.wit; do
+            if wasm-tools component wit "$f" >/dev/null 2>&1; then
+              echo "OK:   $f"
+            else
               echo "FAIL: $f"
               wasm-tools component wit "$f" 2>&1 | head -20
               fail=1
-            else
-              echo "OK:   $f"
             fi
           done
           exit $fail

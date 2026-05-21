@@ -27,15 +27,9 @@ fi
 PATTERN='@[0-9]+\.[0-9]+\.[0-9]+\.wit$'
 
 violations=$(git diff --name-status "$BASE_REF"...HEAD \
-    | awk -v pat="$PATTERN" '
-        $1 == "M" || $1 == "D" {
-            for (i = 2; i <= NF; i++) {
-                if ($i ~ pat) { print $1 "\t" $i }
-            }
-        }
-        $1 ~ /^R/ {
-            if ($2 ~ pat) { print "R\t" $2 " -> " $3 }
-        }
+    | awk -F'\t' -v pat="$PATTERN" '
+        ($1 == "M" || $1 == "D") && $2 ~ pat { print $1 "\t" $2 }
+        $1 ~ /^R/ && $2 ~ pat { print "R\t" $2 " -> " $3 }
       ')
 
 if [[ -z "$violations" ]]; then
