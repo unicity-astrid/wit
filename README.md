@@ -94,6 +94,20 @@ The capsule-to-capsule contracts. Capsules declare which they import/export in `
 | `interfaces/types.wit` | `astrid:types@1.0.0` | Shared types used across interfaces |
 | `interfaces/users.wit` | `astrid:users@1.0.0` | Within-principal user identity store — platform-to-AstridUserId mapping |
 
+## WASI is also available
+
+Capsules see WASI alongside the `astrid:*` packages. The kernel adds `wasmtime_wasi::p2` to the linker, so reach for the standard WASI imports before assuming something is missing from `astrid:*`:
+
+| Need | WASI package |
+|------|--------------|
+| Cryptographically secure random bytes | `wasi:random/random` |
+| Monotonic clock (timeouts, latency, scheduling) | `wasi:clocks/monotonic-clock` |
+| Wall clock with structured datetime | `wasi:clocks/wall-clock` |
+| Sleep / await duration | `wasi:clocks/monotonic-clock.subscribe-duration` |
+| Stream I/O abstractions | `wasi:io/streams` |
+
+`astrid:*` exists where Astrid layers capability gating, principal scoping, or audit on top of what would otherwise be a syscall (`astrid:fs` for VFS-scheme resolution, `astrid:net` for `net_connect` allowlists, etc.). Where no such layering is needed, capsules use WASI directly — there is no `astrid:random` or `astrid:clock-monotonic` because there is nothing to add to the WASI version.
+
 ## How capsules use these
 
 Capsules declare which interfaces they import and export in their `Capsule.toml`:
