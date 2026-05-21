@@ -1,4 +1,4 @@
-package astrid:agent@1.0.0;
+package astrid-bus:agent@1.0.0;
 
 /// Agent interface — runtime envelopes the agent loop publishes for uplinks.
 ///

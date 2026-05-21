@@ -77,37 +77,45 @@ CI enforces this via `scripts/lint-wit-immutability.sh` — any PR that modifies
 
 See [RFC: Host ABI](https://github.com/unicity-astrid/rfcs/pull/22) for the full design (per-domain packages, multi-version kernel registration, frozen-file rule) and [issue #750](https://github.com/unicity-astrid/astrid/issues/750) for the motivating bug.
 
-## Capsule interfaces (`interfaces/`)
+## Capsule interfaces (`interfaces/`) — the `astrid-bus:*` namespace
 
-The capsule-to-capsule contracts. Capsules declare which they import/export in `Capsule.toml`; the kernel validates at boot that every required import has a matching export.
+The capsule-to-capsule contracts. Distinct namespace (`astrid-bus:*`) from the host ABI (`astrid:*`) — the medium is different: host fns are direct wasmtime CM linker calls, bus interfaces are schemas for events that flow over the IPC bus between capsules. Capsules declare which they import/export in `Capsule.toml`; the kernel validates at boot that every required import has a matching export.
 
 | File | Package | Description |
 |------|---------|-------------|
-| `interfaces/llm.wit` | `astrid:llm@1.0.0` | LLM generation requests and streaming responses |
-| `interfaces/session.wit` | `astrid:session@1.0.0` | Conversation session storage and retrieval |
-| `interfaces/spark.wit` | `astrid:spark@1.0.0` | Agent identity and system prompt construction |
-| `interfaces/context.wit` | `astrid:context@1.0.0` | Context window compaction and management |
-| `interfaces/prompt.wit` | `astrid:prompt@1.0.0` | Prompt assembly from components |
-| `interfaces/tool.wit` | `astrid:tool@1.0.0` | Tool dispatch and execution results |
-| `interfaces/hook.wit` | `astrid:hook@1.0.0` | Lifecycle hook fan-out and response collection |
-| `interfaces/registry.wit` | `astrid:registry@1.0.0` | Model registry operations |
-| `interfaces/types.wit` | `astrid:types@1.0.0` | Shared types used across interfaces |
-| `interfaces/users.wit` | `astrid:users@1.0.0` | Within-principal user identity store — platform-to-AstridUserId mapping |
+| `interfaces/llm.wit` | `astrid-bus:llm@1.0.0` | LLM generation requests and streaming responses |
+| `interfaces/session.wit` | `astrid-bus:session@1.0.0` | Conversation session storage and retrieval |
+| `interfaces/spark.wit` | `astrid-bus:spark@1.0.0` | Agent identity and system prompt construction |
+| `interfaces/context.wit` | `astrid-bus:context@1.0.0` | Context window compaction and management |
+| `interfaces/prompt.wit` | `astrid-bus:prompt@1.0.0` | Prompt assembly from components |
+| `interfaces/tool.wit` | `astrid-bus:tool@1.0.0` | Tool dispatch and execution results |
+| `interfaces/hook.wit` | `astrid-bus:hook@1.0.0` | Lifecycle hook fan-out and response collection |
+| `interfaces/registry.wit` | `astrid-bus:registry@1.0.0` | Model registry operations |
+| `interfaces/types.wit` | `astrid-bus:types@1.0.0` | Shared types used across bus interfaces |
+| `interfaces/users.wit` | `astrid-bus:users@1.0.0` | Within-principal user identity store — platform-to-AstridUserId mapping |
+
+(Plus `agent`, `approval`, `client`, `elicit`, `onboarding`, `system`, `user` — see `interfaces/` for the full set.)
 
 ## How capsules use these
 
-Capsules declare which interfaces they import and export in their `Capsule.toml`:
+Capsules declare which host packages and bus interfaces they import/export in their `Capsule.toml`. The two namespaces stay distinct:
 
 ```toml
+# Host ABI — kernel-mediated syscalls.
 [imports.astrid]
+fs = "1.0.0"
+ipc = "1.0.0"
+
+# Capsule-to-capsule event schemas, on the IPC bus.
+[imports.astrid-bus]
 llm = "^1.0"
 session = { version = "^1.0", optional = true }
 
-[exports.astrid]
+[exports.astrid-bus]
 session = "1.0.0"
 ```
 
-The kernel validates at boot that every required import has a matching export from another loaded capsule. The WIT files define the message schemas carried over the IPC bus.
+The kernel validates at boot that every required `astrid-bus` import has a matching `astrid-bus` export from another loaded capsule. The WIT files in `interfaces/` define the message schemas carried over the IPC bus.
 
 ## How SDKs use these
 

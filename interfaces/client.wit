@@ -1,4 +1,4 @@
-package astrid:client@1.0.0;
+package astrid-bus:client@1.0.0;
 
 /// Client interface — connection lifecycle envelopes for uplinks.
 ///

@@ -1,4 +1,4 @@
-package astrid:hook@1.0.0;
+package astrid-bus:hook@1.0.0;
 
 /// Hook interface — maps kernel lifecycle events to semantic hooks.
 ///

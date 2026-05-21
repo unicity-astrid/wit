@@ -1,4 +1,4 @@
-package astrid:onboarding@1.0.0;
+package astrid-bus:onboarding@1.0.0;
 
 /// Onboarding interface — env-var collection at install / first-run.
 ///

@@ -1,12 +1,12 @@
-package astrid:llm@1.0.0;
+package astrid-bus:llm@1.0.0;
 
 /// LLM interface — streaming text generation with tool use support.
 ///
 /// A capsule exporting this interface handles `llm.v1.request.generate.*`
 /// events and publishes `llm.v1.stream.*` streaming responses.
 interface llm {
-    use astrid:types/types.{message, tool-definition, usage};
-    use astrid:registry/registry.{provider-entry};
+    use astrid-bus:types/types.{message, tool-definition, usage};
+    use astrid-bus:registry/registry.{provider-entry};
 
     /// Request asking an LLM-provider capsule to describe itself.
     /// Topic: `llm.v1.request.describe`. The registry capsule fans this

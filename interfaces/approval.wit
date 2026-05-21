@@ -1,4 +1,4 @@
-package astrid:approval@1.0.0;
+package astrid-bus:approval@1.0.0;
 
 /// Approval interface — human-in-the-loop authorization envelopes.
 ///

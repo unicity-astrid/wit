@@ -1,4 +1,4 @@
-package astrid:spark@1.0.0;
+package astrid-bus:spark@1.0.0;
 
 /// Spark interface — agent persona and system prompt construction.
 ///

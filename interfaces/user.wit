@@ -1,4 +1,4 @@
-package astrid:user@1.0.0;
+package astrid-bus:user@1.0.0;
 
 /// User interface — input envelopes from a human via an uplink.
 ///

@@ -1,4 +1,4 @@
-package astrid:elicit@1.0.0;
+package astrid-bus:elicit@1.0.0;
 
 /// Elicit interface — interactive user input during a capsule lifecycle hook.
 ///
@@ -8,7 +8,7 @@ package astrid:elicit@1.0.0;
 /// `elicit` syscall (which is the in-capsule API) — these envelopes carry
 /// the same flow over the IPC bus for uplink consumption.
 interface elicit {
-    use astrid:onboarding/onboarding.{field};
+    use astrid-bus:onboarding/onboarding.{field};
 
     /// A lifecycle hook is requesting user input.
     record request {
