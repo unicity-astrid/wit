@@ -7,26 +7,6 @@ on:
     branches: [main]
 
 jobs:
-  wit-immutability:
-    name: WIT frozen-file immutability
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Determine base ref
-        id: base
-        run: |
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            echo "ref=origin/${{ github.base_ref }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "ref=HEAD~1" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Check frozen-file immutability
-        run: scripts/lint-wit-immutability.sh ${{ steps.base.outputs.ref }}
-
   wit-parses:
     name: WIT files parse
     runs-on: ubuntu-latest

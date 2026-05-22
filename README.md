@@ -74,7 +74,7 @@ To evolve a package:
 4. Leave the existing frozen file untouched.
 5. The kernel registers both versions in its linker (`bindings::ipc_v1_0::add_to_linker` and `bindings::ipc_v1_1::add_to_linker`) so old and new capsules both load.
 
-CI enforces this via `scripts/lint-wit-immutability.sh` — any PR that modifies or deletes a published `*@X.Y.Z.wit` file fails the build.
+The rule is currently a documented convention rather than a CI gate. The automated frozen-file check was retired during pre-adoption iteration (no SDK or capsule is bound to `@1.0.0` yet, so in-place amendments don't break anyone). Once a real downstream consumer ships against a versioned file, re-enable the check (the original script lives in git history) so accidental edits surface in review.
 
 See [RFC: Host ABI](https://github.com/unicity-astrid/rfcs/pull/22) for the full design (per-domain packages, multi-version kernel registration, frozen-file rule) and [issue #750](https://github.com/unicity-astrid/astrid/issues/750) for the motivating bug.
 

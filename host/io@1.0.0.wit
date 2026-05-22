@@ -65,9 +65,11 @@ interface poll {
         invalid-input,
         /// Pollable handle was dropped (or never valid in this store).
         closed,
-        /// Caller exceeded a per-capsule cap (e.g. > 64 pollables in
-        /// a single `poll` call). Subdivide the wait set or use
-        /// resource-specific blocking calls.
+        /// Caller exceeded the hard per-call cap (256 pollables) on
+        /// `poll`. The cap is sized so a capsule at its full IPC
+        /// subscription quota (128) plus its TCP / UDP / HTTP / process
+        /// stream pollables can wait on them all in one call.
+        /// Subdivide the wait set or use resource-specific blocking.
         too-large,
         /// Block was cancelled because the capsule is unloading.
         cancelled,
@@ -102,7 +104,13 @@ interface poll {
     /// that was ready when at least one became so. The returned list
     /// is sorted ascending and contains at least one entry on success.
     ///
-    /// Per-call cap: 64 pollables. Larger lists return `too-large`.
+    /// Per-call cap: 256 pollables. Larger lists return `too-large`.
+    /// The cap is sized so a capsule at full IPC subscription quota
+    /// (128) plus its TCP / UDP / HTTP / process pollables can wait
+    /// on them all in a single call. Per-principal quota profiles
+    /// may lower the effective cap further but never raise it above
+    /// 256.
+    ///
     /// Returns `cancelled` if the capsule unloads mid-poll.
     ///
     /// Audit: every `poll` call recorded (per-principal, with handle
@@ -163,8 +171,13 @@ interface streams {
         /// available right now (not EOF). Use `subscribe` to wait.
         /// EOF or peer close surfaces as `closed` on the next call.
         ///
-        /// Per-call cap: 1 MiB. Larger requests trap (consistent with
-        /// wasi:io behaviour on `len` larger than wasm32 can allocate).
+        /// The host may return fewer than `len` bytes — `len` is the
+        /// caller's *upper bound*, and the host applies its own
+        /// internal buffer ceiling (currently 1 MiB) to bound a single
+        /// call's transfer. Callers loop on `read` to drain larger
+        /// volumes; truncation is not a stream error. Per `wasi:io`
+        /// semantics, a trap only occurs when `len` exceeds what
+        /// wasm32 can address (~4 GiB).
         ///
         /// Audit: recorded (per-principal, with bytes read).
         read: func(len: u64) -> result<list<u8>, stream-error>;
@@ -217,8 +230,11 @@ interface streams {
         /// Convenience: write `contents` and flush, blocking until all
         /// bytes are accepted and the flush completes. Internally
         /// drives `check-write` / `subscribe` / `write` / `flush` in a
-        /// loop. Per-call payload capped at 4 KiB for parity with
-        /// wasi:io.
+        /// loop, so callers don't need an outer loop of their own.
+        /// No fixed cap on payload size — the host segments large
+        /// transfers internally and yields between chunks to keep
+        /// other capsules responsive. (The `wasi:io` documentation
+        /// mentions 4096 in pseudocode but does not actually cap.)
         ///
         /// Audit: recorded (per-principal, with total bytes written).
         blocking-write-and-flush: func(contents: list<u8>) -> result<_, stream-error>;
@@ -245,7 +261,10 @@ interface streams {
         write-zeroes: func(len: u64) -> result<_, stream-error>;
 
         /// Convenience: write `len` zeroes and flush, blocking until
-        /// complete. Per-call cap: 4 KiB.
+        /// complete. No fixed cap on `len` — no guest-side buffer is
+        /// involved, so the host can stream arbitrary zero-fill sizes
+        /// efficiently. The host yields between chunks to keep other
+        /// capsules responsive.
         blocking-write-zeroes-and-flush: func(len: u64) -> result<_, stream-error>;
 
         /// Move up to `len` bytes from `src` to this stream in the
