@@ -5,13 +5,27 @@
 /// directory. All processes are tracked for cancellation.
 /// Security-gated: requires `host_process` capability.
 ///
+/// **Desktop-kernel only.** This package depends on a POSIX-style
+/// fork/exec model. Unikernel targets (hermit-rs, etc.) do not implement
+/// it — capsules importing `astrid:process` will fail to load on those
+/// kernels. Capsule-to-capsule patterns over the IPC bus replace most
+/// child-process workflows on the unikernel target; remaining
+/// workloads stay desktop-only by design.
+///
+/// Child stdio is byte-oriented (`write-stdin` / `read-logs`) rather
+/// than stream-based. The bus already handles high-throughput
+/// capsule-to-capsule traffic; stream halves on `process-handle` would
+/// pull weight only for niche "splice TCP into child into TCP" media-
+/// gateway scenarios that haven't materialised yet. Add as
+/// `process-handle@1.1.0` if/when concrete need arises.
+///
 /// Frozen per the ABI evolution discipline (RFC: host_abi). Shape changes
 /// ship as a new file at a new version path; never edit this file.
 
 package astrid:process@1.0.0;
 
 interface host {
-    use wasi:io/poll@0.2.0.{pollable};
+    use astrid:io/poll@1.0.0.{pollable};
 
     /// Typed error returned from process operations.
     variant error-code {

@@ -19,7 +19,7 @@
 package astrid:ipc@1.0.0;
 
 interface host {
-    use wasi:io/poll@0.2.0.{pollable};
+    use astrid:io/poll@1.0.0.{pollable};
 
     /// Typed error returned from every fallible ipc operation.
     variant error-code {
@@ -117,7 +117,7 @@ interface host {
 
         /// Pollable that fires when messages are queued. Compose with
         /// other pollables (net, future http-stream, etc.) via
-        /// `wasi:io/poll.poll` for multiplexed I/O in bridge and
+        /// `astrid:io/poll.poll` for multiplexed I/O in bridge and
         /// fan-out capsules.
         subscribe-readiness: func() -> pollable;
     }

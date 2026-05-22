@@ -17,6 +17,7 @@ Each domain is its own package, frozen at a per-file version. A capsule imports 
 | File | Package | Description |
 |------|---------|-------------|
 | `host/fs@1.0.0.wit` | `astrid:fs@1.0.0` | Filesystem operations within the workspace boundary — whole-file IO, file handles with positional read/write, metadata, canonicalize, read-link, hard-link. |
+| `host/io@1.0.0.wit` | `astrid:io@1.0.0` | Foundation I/O — three interfaces. `error`: downcastable error resource carried by stream errors. `poll`: Astrid-owned `pollable` resource for readiness multiplexing across heterogeneous host resources. `streams`: `input-stream` / `output-stream` resources with read / write / skip / flush / `splice` for high-throughput host-side byte movement. Shape mirrors `wasi:io@0.2.0` but Astrid-owned — every operation is audited, principal-scoped, cancellable, and quota-bounded. |
 | `host/ipc@1.0.0.wit` | `astrid:ipc@1.0.0` | Publish/subscribe IPC event bus. |
 | `host/uplink@1.0.0.wit` | `astrid:uplink@1.0.0` | Inbound message ingestion from external platforms. |
 | `host/kv@1.0.0.wit` | `astrid:kv@1.0.0` | Per-capsule, per-principal key-value storage with atomic compare-and-swap and paginated key listing. |
@@ -73,7 +74,7 @@ To evolve a package:
 4. Leave the existing frozen file untouched.
 5. The kernel registers both versions in its linker (`bindings::ipc_v1_0::add_to_linker` and `bindings::ipc_v1_1::add_to_linker`) so old and new capsules both load.
 
-CI enforces this via `scripts/lint-wit-immutability.sh` — any PR that modifies or deletes a published `*@X.Y.Z.wit` file fails the build.
+The rule is currently a documented convention rather than a CI gate. The automated frozen-file check was retired during pre-adoption iteration (no SDK or capsule is bound to `@1.0.0` yet, so in-place amendments don't break anyone). Once a real downstream consumer ships against a versioned file, re-enable the check (the original script lives in git history) so accidental edits surface in review.
 
 See [RFC: Host ABI](https://github.com/unicity-astrid/rfcs/pull/22) for the full design (per-domain packages, multi-version kernel registration, frozen-file rule) and [issue #750](https://github.com/unicity-astrid/astrid/issues/750) for the motivating bug.
 
