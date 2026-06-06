@@ -15,11 +15,8 @@
 /// kernel-side impls dispatch to unikernel syscalls instead of
 /// wasmtime-wasi-backed futures.
 ///
-/// **Pre-1.0 DRAFT.** This file is the full shape of the `astrid:sys@1.0.0`
-/// contract, edited in place while the ABI stabilises before launch. The
-/// frozen ABI-evolution discipline (RFC: host_abi) — shape changes ship as a
-/// new file at a new version path, never editing a released file — takes
-/// effect once 1.0 ships; until then this `@1.0.0` file is the working draft.
+/// Frozen per the ABI evolution discipline (RFC: host_abi). Shape changes
+/// ship as a new file at a new version path; never edit this file.
 
 package astrid:sys@1.0.0;
 
