@@ -141,7 +141,7 @@ interface session {
     }
 
     /// Response with one thread's metadata, or absent if no such thread in the
-    /// caller's namespace. Topic: `session.v1.response.get_meta.<corr-id>`.
+    /// caller's namespace. Topic: `session.v1.response.get_meta.<correlation-id>`.
     record get-meta-response {
         correlation-id: string,
         session: option<session-summary>,
