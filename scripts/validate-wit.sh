@@ -50,9 +50,13 @@ stage_other_astrid_deps() {
     for f in "$sibling_dir"/*.wit; do
         [[ "$f" == "$main_file" ]] && continue
         base="$(basename "$f" .wit)"
-        pkg="${base%@*}"
-        mkdir -p "$staging/deps/astrid-$pkg"
-        cp "$f" "$staging/deps/astrid-$pkg/$base.wit"
+        # Stage each version in its OWN deps subdir. wasm-tools treats a single
+        # deps directory as one package, so two versions of the same package
+        # (e.g. http@1.0.0 + http@1.1.0) must not share a dir or it errors with
+        # "package identifier ... does not match previous package name". The dir
+        # name is cosmetic — wasm-tools resolves by the `package` decl inside.
+        mkdir -p "$staging/deps/astrid-${base//@/-}"
+        cp "$f" "$staging/deps/astrid-${base//@/-}/$base.wit"
     done
 }
 
