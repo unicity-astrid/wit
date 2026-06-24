@@ -23,6 +23,7 @@ Each domain is its own package, frozen at a per-file version. A capsule imports 
 | `host/kv@1.0.0.wit` | `astrid:kv@1.0.0` | Per-capsule, per-principal key-value storage with atomic compare-and-swap and paginated key listing. |
 | `host/net@1.0.0.wit` | `astrid:net@1.0.0` | Unix-domain sockets, gated outbound TCP, inbound TCP listener, gated UDP (unconnected + connected mode), gated DNS resolution. |
 | `host/http@1.0.0.wit` | `astrid:http@1.0.0` | HTTP client with SSRF protection and streaming. |
+| `host/http@1.1.0.wit` | `astrid:http@1.1.0` | Additive successor to `@1.0.0` — caller-set per-request timeouts, redirect policy, response/decompression size caps, scheme restriction, subresource integrity, response metadata, streaming request bodies (uploads), and response trailers. An empty `request-options` reproduces `@1.0.0` behaviour. |
 | `host/sys@1.0.0.wit` | `astrid:sys@1.0.0` | Logging, config, time, caller context, entropy, sleep, capability introspection. |
 | `host/process@1.0.0.wit` | `astrid:process@1.0.0` | OS-sandboxed host process spawn (with stdin/env/cwd), wait, signal, kill, read-logs, stdin streaming. |
 | `host/elicit@1.0.0.wit` | `astrid:elicit@1.0.0` | Interactive user input during install/upgrade lifecycle. |
