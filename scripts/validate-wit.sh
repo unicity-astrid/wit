@@ -55,8 +55,9 @@ stage_other_astrid_deps() {
         # (e.g. http@1.0.0 + http@1.1.0) must not share a dir or it errors with
         # "package identifier ... does not match previous package name". The dir
         # name is cosmetic — wasm-tools resolves by the `package` decl inside.
-        mkdir -p "$staging/deps/astrid-${base//@/-}"
-        cp "$f" "$staging/deps/astrid-${base//@/-}/$base.wit"
+        local depdir="$staging/deps/astrid-${base//@/-}"
+        mkdir -p "$depdir"
+        cp "$f" "$depdir/$base.wit"
     done
 }
 

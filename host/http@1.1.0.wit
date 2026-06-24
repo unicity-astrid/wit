@@ -1,13 +1,15 @@
 /// HTTP client operations with SSRF protection — version 1.1.0.
 ///
-/// Additive successor to `astrid:http@1.0.0`. Every @1.0.0 type and function is
-/// carried forward unchanged in shape; @1.1.0 adds caller-set per-request
+/// Additive successor to `astrid:http@1.0.0`. The @1.0.0 request shape and the
+/// `http-request` / `http-stream-start` signatures are preserved, so porting is
+/// mechanical; @1.1.0 then EXTENDS the surface: the buffered `http-response-data`
+/// gains a `meta` field, `http-stream` gains `trailers`, `error-code` gains arms
+/// for the new failure modes, and new functions add caller-set per-request
 /// control (timeouts, redirect policy, size / decompression caps, scheme
-/// restriction, subresource integrity), response metadata, a streaming request
-/// body (upload), and response trailers. An empty `request-options` reproduces
-/// @1.0.0 behaviour exactly, so the host backs both versions from one
-/// implementation with the @1.0.0 entrypoints delegating to the @1.1.0 path
-/// with defaulted options.
+/// restriction, subresource integrity) plus a streaming request body (upload).
+/// An empty `request-options` reproduces @1.0.0 behaviour exactly, so the host
+/// backs both versions from one implementation with the @1.0.0 entrypoints
+/// delegating to the @1.1.0 path with defaulted options.
 ///
 /// SSRF discipline (unchanged from @1.0.0, strengthened here): DNS resolution
 /// blocks private, loopback, link-local, multicast, and unspecified IP
